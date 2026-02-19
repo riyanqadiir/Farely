@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Linking } from 'react-native';
 import farelyApi from '../api/farelyApi';
+import { AuthContext } from '../context/AuthContext';
 
 const HomeScreen = () => {
+  const { logout } = useContext(AuthContext);
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [fares, setFares] = useState([]);
@@ -53,6 +55,9 @@ const HomeScreen = () => {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+        <Text style={styles.logoutBtnText}>Log out</Text>
+      </TouchableOpacity>
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.input}
@@ -104,6 +109,15 @@ const HomeScreen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f6fa' },
+  logoutBtn: {
+    alignSelf: 'flex-end',
+    marginRight: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  logoutBtnText: { color: '#ef4444', fontSize: 15, fontWeight: '600' },
   searchContainer: { padding: 20, backgroundColor: '#fff', elevation: 3 },
   input: { borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8, marginBottom: 10 },
   button: { backgroundColor: '#2ecc71', padding: 15, borderRadius: 8, alignItems: 'center' },

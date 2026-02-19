@@ -4,26 +4,47 @@
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "farely",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "plugins": [
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.732209755307-krgg4q36fnod5n3henpbr2qq65q1o8pt"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Farely uses your photos to set your profile picture."
+        }
+      ]
+    ],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.farely.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.farely.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "googleWebClientId": "732209755307-73gv7r389hrjmhhcprc0ib25ehabl235.apps.googleusercontent.com",
+      "googleIosClientId": "732209755307-krgg4q36fnod5n3henpbr2qq65q1o8pt.apps.googleusercontent.com"
     }
   }
 }
