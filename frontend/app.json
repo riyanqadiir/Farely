@@ -7,7 +7,7 @@
     "scheme": "farely",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "plugins": [
       [
         "@react-native-google-signin/google-signin",
@@ -20,7 +20,8 @@
         {
           "photosPermission": "Farely uses your photos to set your profile picture."
         }
-      ]
+      ],
+      "expo-maps"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -37,7 +38,12 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.farely.app"
+      "package": "com.farely.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBMeAW6Aj0j8-7N6l47W43yecXFJlJ--TU"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -30,7 +30,11 @@ const ForgotPasswordSendScreen = ({ navigation }) => {
         purpose: 'forgot_password',
       });
     } catch (err) {
-      alert(err.response?.data?.message || 'Could not send verification.');
+      const msg = err.response?.data?.message
+        || (err.message?.toLowerCase().includes('network') || err.message?.toLowerCase().includes('request failed')
+          ? 'Cannot reach server. Ensure backend is running and API URL in frontend/src/config/api.js matches your machine IP.'
+          : err.message || 'Could not send verification.');
+      alert(msg);
     } finally {
       setLoading(false);
     }

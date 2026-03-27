@@ -83,7 +83,11 @@ const CompleteProfileScreen = ({ navigation }) => {
           'Profile photo requires a native rebuild. Stop the app, run: npx expo prebuild --clean && npx expo run:android'
         );
       } else {
-        Alert.alert('Upload failed', err.response?.data?.message || err.message || 'Could not upload photo.');
+        const msg = err.response?.data?.message
+          || (err.message?.toLowerCase().includes('network') || err.message?.toLowerCase().includes('failed')
+            ? 'Cannot reach server. Ensure backend is running and API URL in frontend/src/config/api.js is correct.'
+            : err.message || 'Could not upload photo.');
+        Alert.alert('Upload failed', msg);
       }
     } finally {
       setUploadingPhoto(false);
