@@ -1,7 +1,7 @@
 require('dotenv').config();
-const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const User = require('./models/User');
+const mongoose = require('mongoose');
+const User = require('./model/User.model');
 
 const seedAdmin = async () => {
   console.log('Seeding process started...');
@@ -26,11 +26,12 @@ const seedAdmin = async () => {
     const hashedPassword = await bcrypt.hash(adminPassword, salt);
 
     user = new User({
-      name: 'Farely Admin',
+      fullName: 'Farely Admin',
       phone: adminPhone,
       password: hashedPassword,
       role: 'admin',
       walletBalance: 1000,
+      phoneVerified: true,
     });
 
     await user.save();
@@ -45,3 +46,4 @@ const seedAdmin = async () => {
 };
 
 seedAdmin();
+

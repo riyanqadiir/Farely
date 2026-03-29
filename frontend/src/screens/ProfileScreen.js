@@ -27,7 +27,7 @@ const ProfileScreen = () => {
   const [loading, setLoading] = useState(false);
   const [photoUri, setPhotoUri] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const { user, loadUser } = useContext(AuthContext);
+  const { user, loadUser, logout } = useContext(AuthContext);
 
   const profilePhotoUrl = user?.profilePhotoUrl || photoUri;
 
@@ -178,6 +178,10 @@ const ProfileScreen = () => {
           <Text style={styles.saveButtonText}>Save</Text>
         )}
       </TouchableOpacity>
+
+      <TouchableOpacity style={styles.logoutButton} onPress={logout} activeOpacity={0.8}>
+        <Text style={styles.logoutButtonText}>Log out</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 };
@@ -220,6 +224,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  logoutButton: {
+    marginTop: spacing.xl,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+    alignItems: 'center',
+  },
+  logoutButtonText: { color: '#dc2626', fontSize: 16, fontWeight: '700' },
 });
 
 export default ProfileScreen;

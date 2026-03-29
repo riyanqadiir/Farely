@@ -1,0 +1,9 @@
+Tuktuk / rickshaw icon (replace tuktuk.png with your download from Flaticon)
+
+Required credit (web):
+<a href="https://www.flaticon.com/free-icons/tuktuk" title="tuktuk icons">Tuktuk icons created by Maan Icons - Flaticon</a>
+
+Download: https://www.flaticon.com/free-icons/tuktuk
+Save as: frontend/assets/images/ride-types/tuktuk.png (PNG or update require if you use another name)
+
+License: follow Flaticon’s license for your use case (free with attribution unless Premium).

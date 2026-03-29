@@ -9,8 +9,10 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { AuthContext } from '../context/AuthContext';
 import { colors, spacing } from '../constants/theme';
+import AuthDivider from '../components/AuthDivider';
 
 const LoginScreen = ({ navigation }) => {
   const [loginId, setLoginId] = useState('');
@@ -35,63 +37,99 @@ const LoginScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <TouchableOpacity
+          style={styles.backCircle}
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
           <Text style={styles.backArrow}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Sign in with your email or phone number.</Text>
+
+        <Text style={styles.headline}>Welcome back</Text>
+        <Text style={styles.subhead}>Sign in with email or phone and password.</Text>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Email or phone</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="you@email.com or +92…"
+            placeholderTextColor="#9ca3af"
+            value={loginId}
+            onChangeText={setLoginId}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="••••••••"
+            placeholderTextColor="#9ca3af"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+
+          <TouchableOpacity
+            style={styles.forgotWrap}
+            onPress={() => navigation.navigate('ForgotPasswordSend')}
+          >
+            <Text style={styles.forgotText}>Forgot password?</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.primaryBtn} onPress={handleLogin} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryBtnText}>Sign in</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <AuthDivider label="Or continue with" />
 
         <TouchableOpacity
-          style={[styles.socialButton, styles.googleButton]}
+          style={[styles.socialRow, styles.googleRow]}
           onPress={handleGoogleLogin}
           disabled={googleLoading}
+          activeOpacity={0.85}
         >
           {googleLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.socialButtonText}>Sign in with Google</Text>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.socialButton, styles.outlineButton]} disabled>
-          <Text style={styles.socialButtonTextOutline}>Sign in with Facebook</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.socialButton, styles.outlineButton]} disabled>
-          <Text style={styles.socialButtonTextOutline}>Sign in with Phone</Text>
-        </TouchableOpacity>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email or Phone Number"
-          value={loginId}
-          onChangeText={setLoginId}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Enter your Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-        <TouchableOpacity
-          style={styles.forgotLink}
-          onPress={() => navigation.navigate('ForgotPasswordSend')}
-        >
-          <Text style={styles.forgotLinkText}>Forgot password?</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.primaryButtonText}>Sign In</Text>
+            <>
+              <FontAwesome6 name="google" size={20} color="#fff" brand />
+              <Text style={styles.socialRowTextLight}>Google</Text>
+            </>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.footerLink} onPress={() => navigation.navigate('Signup')}>
-          <Text style={styles.footerLinkText}>Don't have an account? Sign Up</Text>
+        <TouchableOpacity style={[styles.socialRow, styles.facebookRow]} disabled activeOpacity={0.7}>
+          <FontAwesome6 name="facebook" size={20} color="#fff" brand />
+          <Text style={styles.socialRowTextLight}>Facebook</Text>
+          <View style={styles.soonPill}>
+            <Text style={styles.soonPillText}>Soon</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.socialRow, styles.phoneRow]} disabled activeOpacity={0.7}>
+          <FontAwesome6 name="phone" size={18} color="#475569" solid />
+          <Text style={styles.socialRowTextDark}>Phone OTP</Text>
+          <View style={[styles.soonPill, styles.soonPillMuted]}>
+            <Text style={styles.soonPillTextMuted}>Soon</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.footerBtn} onPress={() => navigation.navigate('Signup')}>
+          <Text style={styles.footerMuted}>New here? </Text>
+          <Text style={styles.footerLink}>Create an account</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -99,41 +137,117 @@ const LoginScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  scrollContent: { padding: spacing.xl },
-  backButton: { alignSelf: 'flex-start', marginBottom: spacing.lg },
-  backArrow: { fontSize: 24, color: colors.gray700 },
-  title: {
-    fontSize: 20,
-    fontWeight: '600',
+  safe: { flex: 1, backgroundColor: '#f8fafc' },
+  scroll: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  backCircle: {
+    alignSelf: 'flex-start',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  backArrow: { fontSize: 22, color: colors.gray700 },
+  headline: {
+    fontSize: 28,
+    fontWeight: '800',
     color: colors.gray900,
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  subhead: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.gray500,
     marginBottom: spacing.lg,
   },
-  socialButton: { padding: 14, borderRadius: 12, alignItems: 'center', marginBottom: spacing.sm },
-  googleButton: { backgroundColor: '#4285f4' },
-  outlineButton: { borderWidth: 1, borderColor: colors.gray300 },
-  socialButtonText: { color: '#fff', fontSize: 16, fontWeight: '500' },
-  socialButtonTextOutline: { color: colors.gray700, fontSize: 16, fontWeight: '500' },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: spacing.lg,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.gray700,
+    marginBottom: 8,
+  },
   input: {
     borderWidth: 1,
-    borderColor: colors.gray300,
-    padding: 14,
-    borderRadius: 10,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
     marginBottom: spacing.md,
     fontSize: 16,
+    color: colors.gray900,
   },
-  forgotLink: { alignSelf: 'flex-end', marginBottom: spacing.lg },
-  forgotLinkText: { color: '#ef4444', fontSize: 14 },
-  primaryButton: {
+  forgotWrap: { alignSelf: 'flex-end', marginBottom: spacing.lg, marginTop: -4 },
+  forgotText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
+  primaryBtn: {
     backgroundColor: colors.primary,
-    padding: 16,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 14,
     alignItems: 'center',
-    marginBottom: spacing.md,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  primaryButtonText: { color: '#fff', fontSize: 18, fontWeight: '600' },
-  footerLink: { alignItems: 'center' },
-  footerLinkText: { color: colors.primary, fontSize: 15 },
+  primaryBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  socialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    marginBottom: 10,
+  },
+  googleRow: { backgroundColor: '#4285f4' },
+  facebookRow: { backgroundColor: '#1877f2' },
+  phoneRow: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  socialRowTextLight: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  socialRowTextDark: { color: '#334155', fontSize: 16, fontWeight: '700' },
+  soonPill: {
+    position: 'absolute',
+    right: 12,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  soonPillText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  soonPillMuted: { backgroundColor: '#f1f5f9' },
+  soonPillTextMuted: { fontSize: 11, fontWeight: '700', color: '#64748b' },
+  footerBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    paddingVertical: 8,
+  },
+  footerMuted: { fontSize: 15, color: colors.gray500 },
+  footerLink: { fontSize: 15, fontWeight: '700', color: colors.primary },
 });
 
 export default LoginScreen;

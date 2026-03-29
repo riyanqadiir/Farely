@@ -15,18 +15,63 @@ import CompleteProfileScreen from './src/screens/CompleteProfileScreen';
 import ForgotPasswordSendScreen from './src/screens/ForgotPasswordSendScreen';
 import ForgotPasswordSetNewScreen from './src/screens/ForgotPasswordSetNewScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import RideOptionsScreen from './src/screens/RideOptionsScreen';
+import ChatScreen from './src/screens/ChatScreen';
+import PaymentScreen from './src/screens/PaymentScreen';
 import WalletScreen from './src/screens/WalletScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import { ActivityIndicator, View } from 'react-native';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+
+const TAB_ICON_SIZE = 24;
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
+/** fa-regular (inactive) vs fa-solid (active); no background chip. */
+function TabIcon({ focused, name }) {
+  const color = focused ? '#2563eb' : '#64748b';
+  return focused ? (
+    <FontAwesome6 name={name} size={TAB_ICON_SIZE} color={color} solid />
+  ) : (
+    <FontAwesome6 name={name} size={TAB_ICON_SIZE} color={color} regular />
+  );
+}
+
+const tabBarScreenOptions = {
+  headerShown: false,
+  tabBarActiveTintColor: '#2563eb',
+  tabBarInactiveTintColor: '#64748b',
+  tabBarStyle: {
+    backgroundColor: '#ffffff',
+    borderTopColor: '#e5e7eb',
+    borderTopWidth: 1,
+  },
+};
+
 const MainTab = () => (
-  <Tab.Navigator screenOptions={{ tabBarActiveTintColor: '#2563eb' }}>
-    <Tab.Screen name="Rides" component={HomeScreen} />
-    <Tab.Screen name="Wallet" component={WalletScreen} />
-    <Tab.Screen name="Profile" component={ProfileScreen} />
+  <Tab.Navigator screenOptions={tabBarScreenOptions}>
+    <Tab.Screen
+      name="Rides"
+      component={HomeScreen}
+      options={{
+        tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="car" />,
+      }}
+    />
+    <Tab.Screen
+      name="Wallet"
+      component={WalletScreen}
+      options={{
+        tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="wallet" />,
+      }}
+    />
+    <Tab.Screen
+      name="Profile"
+      component={ProfileScreen}
+      options={{
+        tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="user" />,
+      }}
+    />
   </Tab.Navigator>
 );
 
@@ -63,6 +108,9 @@ const AppNavigator = () => {
             <>
               <Stack.Screen name="CompleteProfile" component={CompleteProfileScreen} />
               <Stack.Screen name="Main" component={MainTab} />
+              <Stack.Screen name="RideOptions" component={RideOptionsScreen} />
+              <Stack.Screen name="Chat" component={ChatScreen} />
+              <Stack.Screen name="Payment" component={PaymentScreen} />
             </>
           ) : (
             <>
