@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import farelyApi from '../api/farelyApi';
+import { pushAppNotification } from '../utils/notifications';
+import { useRideWidget } from '../context/RideWidgetContext';
 
 const PaymentScreen = ({ navigation, route }) => {
   const receipt = route?.params?.receipt ?? {};
@@ -9,6 +11,7 @@ const PaymentScreen = ({ navigation, route }) => {
   const [method, setMethod] = useState('cash'); // cash | card | wallet
   const [paying, setPaying] = useState(false);
   const transactionIdRef = useRef(null);
+  const { clearRideWidget } = useRideWidget();
 
   useEffect(() => {
     // stable idempotency key for this payment screen instance
@@ -55,11 +58,24 @@ const PaymentScreen = ({ navigation, route }) => {
 
       const res = await farelyApi.post('/wallet/pay', payload);
       const duplicated = !!res.data?.duplicated;
+      clearRideWidget();
+      pushAppNotification({
+        type: 'transaction',
+        title: duplicated ? 'Payment already recorded' : 'Payment successful',
+        body: `${duplicated ? 'Existing' : 'New'} ${method.toUpperCase()} transaction for PKR ${Math.round(amount)}.`,
+        meta: { method, amount, rideId },
+      });
       Alert.alert('Payment successful', duplicated ? 'Payment already recorded.' : `Paid via ${method.toUpperCase()}.`, [
         { text: 'Done', onPress: () => navigation.popToTop() },
       ]);
     } catch (err) {
       const msg = err.response?.data?.message || 'Payment failed';
+      pushAppNotification({
+        type: 'transaction',
+        title: 'Payment failed',
+        body: msg,
+        meta: { method, rideId },
+      });
       Alert.alert('Payment failed', msg);
     } finally {
       setPaying(false);

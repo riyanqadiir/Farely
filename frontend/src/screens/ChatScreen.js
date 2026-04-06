@@ -1,18 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  TextInput,
-  Animated,
-  Easing,
-  Alert,
-  Linking,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Alert, Linking, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+import { pushAppNotification } from '../utils/notifications';
+import { useRideWidget } from '../context/RideWidgetContext';
+import { useFocusEffect } from '@react-navigation/native';
 
 const WAIT_MS = 5 * 60 * 1000;
 
@@ -35,31 +27,17 @@ const ChatScreen = ({ navigation, route }) => {
   const numberPlate = driver?.numberPlate || rideOption?.rider?.numberPlate || '';
   const provider = rideOption?.provider || '';
   const fare = typeof rideOption?.fare === 'number' ? rideOption.fare : null;
+  const { startRideWidget } = useRideWidget();
 
-  const [messages, setMessages] = useState(() => [
-    {
-      id: 'sys-1',
-      from: 'system',
-      text: 'Driver assigned. You can call or send a quick message.',
-      ts: Date.now(),
-    },
-  ]);
-  const [input, setInput] = useState('');
   const [arrived, setArrived] = useState(false);
-  const [arrivePopup, setArrivePopup] = useState(false);
-
   const startRef = useRef(Date.now());
   const [now, setNow] = useState(Date.now());
-
-  const { width } = Dimensions.get('window');
-  const trackWidth = Math.min(320, width - 64);
-  const carX = useRef(new Animated.Value(0)).current;
+  const islandAnim = useRef(new Animated.Value(0)).current;
 
   const remainingMs = useMemo(() => {
     const elapsed = now - startRef.current;
     return WAIT_MS - elapsed;
   }, [now]);
-
   const expired = remainingMs <= 0;
 
   useEffect(() => {
@@ -68,60 +46,81 @@ const ChatScreen = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
-    // Driver slide animation
-    carX.setValue(0);
-    const anim = Animated.timing(carX, {
-      toValue: 1,
-      duration: 2200,
-      easing: Easing.inOut(Easing.cubic),
-      useNativeDriver: true,
+    startRideWidget({
+      id: rideOption?.id || booking?.rideId || `ride_${Date.now()}`,
+      rideId: rideOption?.id || booking?.rideId || null,
+      provider,
+      driverName,
+      driverPhone,
+      numberPlate,
+      pickup,
+      destination,
+      fare,
+      expiresAt: Date.now() + 5 * 60 * 1000,
     });
-    anim.start(({ finished }) => {
+  }, [booking?.rideId, destination, driverName, driverPhone, fare, numberPlate, pickup, provider, rideOption?.id, startRideWidget]);
+
+  useEffect(() => {
+    islandAnim.setValue(0);
+    const sequence = Animated.sequence([
+      Animated.delay(2200),
+      Animated.timing(islandAnim, {
+        toValue: 1,
+        duration: 1200,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: false,
+      }),
+    ]);
+
+    sequence.start(({ finished }) => {
       if (!finished) return;
       setArrived(true);
-      setArrivePopup(true);
-      setMessages((prev) => [
-        ...prev,
-        { id: `sys-arr-${Date.now()}`, from: 'system', text: "Driver has arrived.", ts: Date.now() },
-      ]);
-      setTimeout(() => setArrivePopup(false), 1600);
+      pushAppNotification({
+        type: 'driver',
+        title: 'Driver arrived',
+        body: `${driverName} has arrived at pickup and is waiting for you.`,
+        meta: { driverName, provider },
+      });
     });
-    return () => {
-      anim.stop();
-    };
-  }, [carX]);
+
+    return () => sequence.stop();
+  }, [driverName, islandAnim, provider]);
 
   const handleCall = async () => {
-    if (!driverPhone) return Alert.alert('No phone number', 'Driver phone number is missing.');
+    if (!driverPhone) return Alert.alert('No phone number', 'Rider phone number is missing.');
     const url = `tel:${driverPhone}`;
     try {
       const ok = await Linking.canOpenURL(url);
       if (!ok) return Alert.alert('Cannot call', 'Calling is not available on this device.');
       await Linking.openURL(url);
+      pushAppNotification({
+        type: 'driver',
+        title: 'Call started',
+        body: `Calling rider ${driverName}.`,
+        meta: { driverPhone },
+      });
     } catch (_) {
       Alert.alert('Cannot call', 'Calling failed.');
     }
   };
 
-  const sendMessage = (text, from = 'me') => {
-    const trimmed = (text || '').trim();
-    if (!trimmed) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: `${from}-${Date.now()}`, from, text: trimmed, ts: Date.now() },
-    ]);
-  };
-
-  const handleSend = () => {
-    if (expired) return;
-    sendMessage(input, 'me');
-    setInput('');
-  };
-
-  const handleImComing = () => {
-    if (expired) return;
-    sendMessage("I'm coming.", 'me');
-    sendMessage('Okay, I will wait at pickup.', 'driver');
+  const handleWhatsApp = async () => {
+    if (!driverPhone) return Alert.alert('No WhatsApp number', 'Rider WhatsApp number is missing.');
+    const digits = String(driverPhone).replace(/\D/g, '');
+    const url = `https://wa.me/${digits}`;
+    try {
+      const ok = await Linking.canOpenURL(url);
+      if (!ok) return Alert.alert('Cannot open WhatsApp', 'WhatsApp is not installed or link is invalid.');
+      await Linking.openURL(url);
+      pushAppNotification({
+        type: 'driver',
+        title: 'WhatsApp opened',
+        body: `Opened WhatsApp chat with rider ${driverName}.`,
+        meta: { driverPhone },
+      });
+    } catch (_) {
+      Alert.alert('Cannot open WhatsApp', 'Failed to open WhatsApp link.');
+    }
   };
 
   const handlePay = () => {
@@ -140,22 +139,38 @@ const ChatScreen = ({ navigation, route }) => {
     });
   };
 
-  const carTranslate = carX.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, trackWidth - 42],
-  });
+  const goToRideScreen = () => {
+    navigation.navigate('Main', { screen: 'Rides' });
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        goToRideScreen();
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }, [navigation])
+  );
+
+  const islandWidth = islandAnim.interpolate({ inputRange: [0, 1], outputRange: [300, 170] });
+  const islandHeight = islandAnim.interpolate({ inputRange: [0, 1], outputRange: [56, 36] });
+  const bigLabelOpacity = islandAnim.interpolate({ inputRange: [0, 0.55, 1], outputRange: [1, 0, 0] });
+  const timerOpacity = islandAnim.interpolate({ inputRange: [0, 0.55, 1], outputRange: [0, 0.15, 1] });
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+          <TouchableOpacity onPress={goToRideScreen} style={styles.headerBtn}>
             <Text style={styles.headerBtnText}>Back</Text>
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>{driverName}</Text>
             <Text style={styles.headerSub}>
-              {driverPhone || '—'}{numberPlate ? ` • ${numberPlate}` : ''}
+              {driverPhone || '—'}
+              {numberPlate ? ` • ${numberPlate}` : ''}
             </Text>
           </View>
           <TouchableOpacity onPress={handlePay} style={styles.payPill}>
@@ -163,77 +178,42 @@ const ChatScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.statusCard}>
-          <View style={styles.statusRow}>
-            <Text style={styles.statusLabel}>{arrived ? 'Arrived' : 'On the way'}</Text>
-            <Text style={[styles.timer, expired ? styles.timerExpired : null]}>
-              {expired ? 'Waiting time ended' : `Waiting: ${formatTime(remainingMs)}`}
-            </Text>
-          </View>
+        <View style={styles.mainBody}>
+          <Animated.View style={[styles.island, { width: islandWidth, height: islandHeight }]}>
+            <Animated.Text style={[styles.islandBigText, { opacity: bigLabelOpacity }]}>
+              Driver is on the way
+            </Animated.Text>
+            <Animated.Text style={[styles.islandTimer, { opacity: timerOpacity }]}>
+              {expired ? '00:00' : formatTime(remainingMs)}
+            </Animated.Text>
+          </Animated.View>
 
-          <View style={styles.trackWrap}>
-            <View style={[styles.track, { width: trackWidth }]}>
-              <View style={styles.dotLeft} />
-              <View style={styles.dotRight} />
-              <Animated.View style={[styles.car, { transform: [{ translateX: carTranslate }] }]}>
-                <Text style={styles.carText}>🚗</Text>
-              </Animated.View>
+          <View style={styles.contactCard}>
+            <Text style={styles.sectionTitle}>Rider contact</Text>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>WhatsApp</Text>
+              <Text style={styles.infoValue}>{driverPhone || '—'}</Text>
             </View>
-            {!!arrivePopup && (
-              <View style={styles.popup}>
-                <Text style={styles.popupText}>Driver arrived</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.actionsRow}>
-            <TouchableOpacity style={[styles.actionBtn, expired ? styles.actionDisabled : null]} onPress={handleImComing} disabled={expired}>
-              <Text style={styles.actionBtnText}>I’m coming</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.callBtn} onPress={handleCall}>
-              <Text style={styles.callBtnText}>Call</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <FlatList
-          data={messages}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.chatContent}
-          renderItem={({ item }) => (
-            <View
-              style={[
-                styles.bubble,
-                item.from === 'me' ? styles.bubbleMe : null,
-                item.from === 'driver' ? styles.bubbleDriver : null,
-                item.from === 'system' ? styles.bubbleSystem : null,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.bubbleText,
-                  item.from === 'me' ? styles.bubbleTextMe : null,
-                  item.from === 'system' ? styles.bubbleTextSystem : null,
-                ]}
-              >
-                {item.text}
-              </Text>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Status</Text>
+              <Text style={styles.infoValue}>{arrived ? 'Arrived' : 'On the way'}</Text>
             </View>
-          )}
-        />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Car No</Text>
+              <Text style={styles.infoValue}>{numberPlate || '—'}</Text>
+            </View>
 
-        <View style={styles.inputBar}>
-          <TextInput
-            style={[styles.input, expired ? styles.inputDisabled : null]}
-            placeholder={expired ? 'Waiting ended' : 'Message...'}
-            placeholderTextColor="#94a3b8"
-            value={input}
-            onChangeText={setInput}
-            editable={!expired}
-          />
-          <TouchableOpacity style={[styles.sendBtn, expired ? styles.sendDisabled : null]} onPress={handleSend} disabled={expired}>
-            <Text style={styles.sendBtnText}>Send</Text>
-          </TouchableOpacity>
+            <View style={styles.actionsRow}>
+              <TouchableOpacity style={styles.whatsAppBtn} onPress={handleWhatsApp}>
+                <FontAwesome6 name="whatsapp" size={14} color="#fff" />
+                <Text style={styles.whatsAppBtnText}>WhatsApp</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.callBtn} onPress={handleCall}>
+                <FontAwesome6 name="phone" size={12} color="#fff" solid />
+                <Text style={styles.callBtnText}>Call</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -262,107 +242,52 @@ const styles = StyleSheet.create({
   payPill: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: '#2563eb' },
   payPillText: { color: '#fff', fontWeight: '900', fontSize: 12 },
 
-  statusCard: {
-    margin: 14,
+  mainBody: { flex: 1, paddingHorizontal: 14, paddingTop: 12, alignItems: 'center' },
+  island: {
+    borderRadius: 999,
+    backgroundColor: '#111827',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  islandBigText: { color: '#fff', fontWeight: '900', fontSize: 13 },
+  islandTimer: { color: '#86efac', fontWeight: '900', fontSize: 13, position: 'absolute' },
+
+  contactCard: {
+    marginTop: 16,
+    width: '100%',
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 16,
     padding: 14,
     backgroundColor: '#fff',
   },
-  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  statusLabel: { fontWeight: '900', color: '#0f172a' },
-  timer: { fontWeight: '900', color: '#16a34a' },
-  timerExpired: { color: '#dc2626' },
-
-  trackWrap: { marginTop: 12, alignItems: 'center' },
-  track: {
-    height: 28,
-    borderRadius: 999,
-    backgroundColor: '#d9f99d',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  dotLeft: {
-    position: 'absolute',
-    left: 10,
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    borderWidth: 2,
-    borderColor: '#60a5fa',
-    backgroundColor: '#fff',
-  },
-  dotRight: {
-    position: 'absolute',
-    right: 10,
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    borderWidth: 2,
-    borderColor: '#84cc16',
-    backgroundColor: '#fff',
-  },
-  car: { position: 'absolute', left: 10 },
-  carText: { fontSize: 18 },
-  popup: {
-    marginTop: 10,
-    backgroundColor: '#0f172a',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  popupText: { color: '#fff', fontWeight: '900', fontSize: 12 },
-
-  actionsRow: { marginTop: 12, flexDirection: 'row', gap: 10 },
-  actionBtn: {
+  sectionTitle: { fontWeight: '900', fontSize: 15, color: '#0f172a', marginBottom: 10 },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, gap: 10 },
+  infoLabel: { color: '#64748b', fontWeight: '800' },
+  infoValue: { color: '#0f172a', fontWeight: '800', flex: 1, textAlign: 'right' },
+  actionsRow: { marginTop: 14, flexDirection: 'row', gap: 10 },
+  whatsAppBtn: {
     flex: 1,
-    backgroundColor: '#111827',
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  actionDisabled: { opacity: 0.5 },
-  actionBtnText: { color: '#fff', fontWeight: '900' },
-  callBtn: {
-    width: 96,
     backgroundColor: '#16a34a',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  whatsAppBtnText: { color: '#fff', fontWeight: '900' },
+  callBtn: {
+    width: 110,
+    backgroundColor: '#2563eb',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
   },
   callBtnText: { color: '#fff', fontWeight: '900' },
-
-  chatContent: { paddingHorizontal: 14, paddingBottom: 10, gap: 10 },
-  bubble: { maxWidth: '80%', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14 },
-  bubbleMe: { alignSelf: 'flex-end', backgroundColor: '#2563eb' },
-  bubbleDriver: { alignSelf: 'flex-start', backgroundColor: '#f1f5f9' },
-  bubbleSystem: { alignSelf: 'center', backgroundColor: '#fef3c7' },
-  bubbleText: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
-  bubbleTextMe: { color: '#fff' },
-  bubbleTextSystem: { color: '#92400e' },
-
-  inputBar: {
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    padding: 12,
-    flexDirection: 'row',
-    gap: 10,
-    backgroundColor: '#fff',
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  inputDisabled: { backgroundColor: '#f8fafc', color: '#94a3b8' },
-  sendBtn: { backgroundColor: '#2563eb', borderRadius: 12, paddingHorizontal: 14, justifyContent: 'center' },
-  sendDisabled: { opacity: 0.6 },
-  sendBtnText: { color: '#fff', fontWeight: '900' },
 });
 

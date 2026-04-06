@@ -17,8 +17,9 @@ try {
 import { AuthContext } from '../context/AuthContext';
 import { profileApi } from '../api/profile';
 import { colors, spacing } from '../constants/theme';
+import { pushAppNotification } from '../utils/notifications';
 
-const ProfileScreen = () => {
+const ProfileScreen = ({ navigation, route }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [street, setStreet] = useState('');
@@ -27,9 +28,10 @@ const ProfileScreen = () => {
   const [loading, setLoading] = useState(false);
   const [photoUri, setPhotoUri] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const { user, loadUser, logout } = useContext(AuthContext);
+  const { user, loadUser } = useContext(AuthContext);
 
   const profilePhotoUrl = user?.profilePhotoUrl || photoUri;
+  const openedFromMenu = !!route?.params?.fromMenu;
 
   useEffect(() => {
     if (user) {
@@ -106,6 +108,12 @@ const ProfileScreen = () => {
         district: district.trim() || undefined,
       });
       await loadUser();
+      pushAppNotification({
+        type: 'app',
+        title: 'Profile updated',
+        body: 'Your profile settings were saved successfully.',
+        meta: {},
+      });
       Alert.alert('Saved', 'Profile updated.');
     } catch (err) {
       Alert.alert('Error', err.response?.data?.message || 'Could not save profile.');
@@ -116,6 +124,15 @@ const ProfileScreen = () => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      {openedFromMenu && (
+        <View style={styles.inlineHeader}>
+          <TouchableOpacity onPress={() => navigation.navigate('Menu')} style={styles.inlineBackBtn}>
+            <Text style={styles.inlineBackText}>Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.inlineHeaderTitle}>Profile settings</Text>
+          <View style={{ width: 64 }} />
+        </View>
+      )}
       <Text style={styles.title}>Edit Profile</Text>
 
       <TouchableOpacity
@@ -178,10 +195,6 @@ const ProfileScreen = () => {
           <Text style={styles.saveButtonText}>Save</Text>
         )}
       </TouchableOpacity>
-
-      <TouchableOpacity style={styles.logoutButton} onPress={logout} activeOpacity={0.8}>
-        <Text style={styles.logoutButtonText}>Log out</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 };
@@ -189,6 +202,23 @@ const ProfileScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   scrollContent: { padding: spacing.xl },
+  inlineHeader: {
+    marginTop: 10,
+    marginBottom: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inlineBackBtn: {
+    width: 64,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+  },
+  inlineBackText: { color: '#2563eb', fontWeight: '800', fontSize: 12 },
+  inlineHeaderTitle: { fontSize: 16, fontWeight: '900', color: '#0f172a' },
   title: { fontSize: 20, fontWeight: '600', color: colors.gray900, marginBottom: spacing.xl },
   avatarContainer: {
     alignSelf: 'center',
@@ -224,16 +254,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  logoutButton: {
-    marginTop: spacing.xl,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    backgroundColor: '#fef2f2',
-    alignItems: 'center',
-  },
-  logoutButtonText: { color: '#dc2626', fontSize: 16, fontWeight: '700' },
 });
 
 export default ProfileScreen;

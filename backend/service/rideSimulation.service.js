@@ -26,7 +26,7 @@ const PRICING = {
   rickshaw: { base: 0, perKm: 137.5 },
   car: { base: 0, perKm: 175 },
   // Premium kept higher for demo realism
-  premium: { base: 0, perKm: 250 },
+  premium: { base: 0, perKm: 350 },
 };
 
 function calcPrice(type, distanceKm) {
@@ -112,6 +112,41 @@ const pricingTypeByRideType = {
   premium: 'premium',
 };
 
+/**
+ * Minimum fare for route + ride type (no provider markup, no booking side effects).
+ */
+function estimateMinFare({ pickupCoords, destinationCoords, rideType }) {
+  if (!pickupCoords || !destinationCoords) {
+    const err = new Error('Pickup and destination coordinates are required');
+    err.statusCode = 400;
+    throw err;
+  }
+  const lat1 = pickupCoords.latitude;
+  const lon1 = pickupCoords.longitude;
+  const lat2 = destinationCoords.latitude;
+  const lon2 = destinationCoords.longitude;
+  if (
+    typeof lat1 !== 'number' || typeof lon1 !== 'number'
+    || typeof lat2 !== 'number' || typeof lon2 !== 'number'
+  ) {
+    const err = new Error('Invalid coordinates');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const distanceKm = haversineKm(lat1, lon1, lat2, lon2);
+  const normalizedRideType = String(rideType || 'car').trim().toLowerCase();
+  const pricingType = pricingTypeByRideType[normalizedRideType] || 'car';
+  const rawBase = calcPrice(pricingType, distanceKm);
+  const baseFare = Math.max(50, Math.round(rawBase));
+
+  return {
+    baseFare,
+    distanceKm: Number(distanceKm.toFixed(2)),
+    rideType: normalizedRideType,
+  };
+}
+
 function findRides({ pickup, destination, pickupCoords, destinationCoords, rideType }) {
   if (!pickup || !destination) {
     const err = new Error('Please provide pickup and destination');
@@ -130,6 +165,9 @@ function findRides({ pickup, destination, pickupCoords, destinationCoords, rideT
 
   const normalizedRideType = String(rideType || 'car').trim().toLowerCase();
   const pricingType = pricingTypeByRideType[normalizedRideType] || 'car';
+
+  const rawBase = calcPrice(pricingType, distanceKm);
+  const baseFare = Math.max(50, Math.round(rawBase));
 
   const baseId = Date.now();
   const providers = ['Careem', 'Yango', 'Uber'];
@@ -152,7 +190,7 @@ function findRides({ pickup, destination, pickupCoords, destinationCoords, rideT
     const providerPricing = PROVIDER_PRICING[opt.provider] || { multiplier: 1.0, baseAdd: 0 };
     const basePrice = calcPrice(opt.pricingType, distanceKm);
     const fare = Math.max(
-      50,
+      baseFare,
       Math.round((basePrice + providerPricing.baseAdd) * providerPricing.multiplier * opt.fareMultiplier)
     );
 
@@ -181,7 +219,12 @@ function findRides({ pickup, destination, pickupCoords, destinationCoords, rideT
     return rideOption;
   });
 
-  return comparisons;
+  return {
+    baseFare,
+    distanceKm: Number(distanceKm.toFixed(2)),
+    rideType: normalizedRideType,
+    comparisons,
+  };
 }
 
 function bookRide(rideId) {
@@ -219,5 +262,6 @@ function bookRide(rideId) {
 module.exports = {
   findRides,
   bookRide,
+  estimateMinFare,
 };
 

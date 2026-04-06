@@ -45,7 +45,41 @@ async function compare(req, res, next) {
   }
 }
 
+async function estimateMin(req, res, next) {
+  try {
+    const {
+      pickupLat,
+      pickupLng,
+      destinationLat,
+      destinationLng,
+      rideType,
+    } = req.body || {};
+
+    const pickupCoords =
+      typeof pickupLat === 'number' && typeof pickupLng === 'number'
+        ? { latitude: pickupLat, longitude: pickupLng }
+        : null;
+    const destinationCoords =
+      typeof destinationLat === 'number' && typeof destinationLng === 'number'
+        ? { latitude: destinationLat, longitude: destinationLng }
+        : null;
+
+    const data = rideSimulationService.estimateMinFare({
+      pickupCoords,
+      destinationCoords,
+      rideType,
+    });
+    return res.json(data);
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ msg: err.message });
+    }
+    next(err);
+  }
+}
+
 module.exports = {
   compare,
+  estimateMin,
 };
 

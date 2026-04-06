@@ -10,6 +10,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 let ImagePicker = null;
 try {
   ImagePicker = require('expo-image-picker');
@@ -105,8 +106,10 @@ const CompleteProfileScreen = ({ navigation }) => {
         city: city.trim() || undefined,
         district: district.trim() || undefined,
       });
+      await AsyncStorage.setItem('profileOnboarded', 'true');
+      await loadUser?.();
       setPendingProfileComplete?.(false);
-      navigation.navigate('Main');
+      navigation.replace('Main');
     } catch (err) {
       alert(err.response?.data?.message || 'Could not save profile.');
     } finally {
@@ -114,9 +117,10 @@ const CompleteProfileScreen = ({ navigation }) => {
     }
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
+    await AsyncStorage.setItem('profileOnboarded', 'true');
     setPendingProfileComplete?.(false);
-    navigation.navigate('Main');
+    navigation.replace('Main');
   };
 
   return (

@@ -37,6 +37,7 @@ const ForgotPasswordSetNewScreen = ({ route, navigation }) => {
       });
       await AsyncStorage.setItem('token', res.data.token);
       await loadUser();
+      navigation.navigate('Main', { screen: 'Rides' });
     } catch (err) {
       alert(err.response?.data?.message || 'Could not reset password.');
     } finally {

@@ -26,7 +26,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
@@ -35,7 +35,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.farely.app",
@@ -50,7 +50,8 @@
     },
     "extra": {
       "googleWebClientId": "732209755307-73gv7r389hrjmhhcprc0ib25ehabl235.apps.googleusercontent.com",
-      "googleIosClientId": "732209755307-krgg4q36fnod5n3henpbr2qq65q1o8pt.apps.googleusercontent.com"
+      "googleIosClientId": "732209755307-krgg4q36fnod5n3henpbr2qq65q1o8pt.apps.googleusercontent.com",
+      "googleMapsApiKey": "AIzaSyBMeAW6Aj0j8-7N6l47W43yecXFJlJ--TU"
     }
   }
 }

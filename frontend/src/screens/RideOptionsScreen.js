@@ -10,8 +10,11 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import farelyApi from '../api/farelyApi';
 import { getProviderLogo } from '../constants/brandAssets';
+import { pushAppNotification } from '../utils/notifications';
+import { useRideWidget } from '../context/RideWidgetContext';
 
 const RideOptionsScreen = ({ navigation, route }) => {
   const pickup = route?.params?.pickup ?? '';
@@ -19,12 +22,15 @@ const RideOptionsScreen = ({ navigation, route }) => {
   const initialRideType = route?.params?.rideType ?? 'car';
   const initialSortBy = route?.params?.sortBy ?? 'fare';
   const incomingFares = route?.params?.fares ?? [];
+  const routeBaseFare = route?.params?.baseFare;
+  const routeDistanceKm = route?.params?.distanceKm;
 
   const [rideType] = useState(initialRideType);
   const [sortBy, setSortBy] = useState(initialSortBy);
   const [fares, setFares] = useState(incomingFares);
   const [bookingLoadingId, setBookingLoadingId] = useState(null);
   const [bookingStatus, setBookingStatus] = useState('');
+  const { startRideWidget } = useRideWidget();
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -46,8 +52,16 @@ const RideOptionsScreen = ({ navigation, route }) => {
 
   const toggleSort = () => setSortBy((v) => (v === 'fare' ? 'eta' : 'fare'));
 
+  const goToRideHome = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Main', { screen: 'Rides' });
+    }
+  };
+
   const handleChange = () => {
-    navigation.goBack();
+    goToRideHome();
   };
 
   const handleBook = async (rideOption) => {
@@ -63,6 +77,24 @@ const RideOptionsScreen = ({ navigation, route }) => {
       if (!mountedRef.current) return;
 
       setBookingStatus(status || 'Driver Assigned');
+      startRideWidget({
+        id: id,
+        rideId: id,
+        provider: rideOption?.provider || '',
+        driverName: driver?.name || rideOption?.rider?.name || 'Driver',
+        driverPhone: driver?.phone || rideOption?.rider?.phone || '',
+        numberPlate: driver?.numberPlate || rideOption?.rider?.numberPlate || '',
+        pickup,
+        destination,
+        fare: typeof rideOption?.fare === 'number' ? rideOption.fare : null,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+      });
+      pushAppNotification({
+        type: 'ride',
+        title: 'Driver assigned',
+        body: `${driver?.name || 'Your driver'} accepted your ride on ${rideOption?.provider || 'Farely'}.`,
+        meta: { rideId: rideOption?.id || null, provider: rideOption?.provider || '' },
+      });
 
       navigation.navigate('Chat', {
         booking: { driver, driverLocation, status: status || 'Driver Assigned' },
@@ -81,6 +113,18 @@ const RideOptionsScreen = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
+        <View style={styles.backRow}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={goToRideHome}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Back to ride map"
+          >
+            <FontAwesome6 name="chevron-left" size={14} color="#2563eb" solid />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View style={styles.headerText}>
@@ -92,6 +136,18 @@ const RideOptionsScreen = ({ navigation, route }) => {
               <Text style={styles.meta}>
                 Type: {rideType} • Sort: {sortBy}
               </Text>
+              {typeof routeBaseFare === 'number' && Number.isFinite(routeBaseFare) && (
+                <View style={styles.baseFareBanner}>
+                  <Text style={styles.baseFareLabel}>Minimum base fare (estimate)</Text>
+                  <Text style={styles.baseFareValue}>
+                    PKR {Math.round(routeBaseFare)}
+                    {typeof routeDistanceKm === 'number' && Number.isFinite(routeDistanceKm)
+                      ? ` · ${routeDistanceKm} km`
+                      : ''}
+                  </Text>
+                  <Text style={styles.baseFareHint}>Listed prices are this amount or higher.</Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.headerBtns}>
@@ -164,6 +220,20 @@ export default RideOptionsScreen;
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#fff' },
   container: { flex: 1, backgroundColor: '#fff' },
+  backRow: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 4,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingRight: 12,
+  },
+  backText: { fontSize: 16, fontWeight: '700', color: '#2563eb' },
   header: {
     paddingHorizontal: 16,
     paddingTop: 10,
@@ -177,6 +247,18 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: 6, color: '#64748b', fontSize: 12 },
   bookingStatus: { marginTop: 8, color: '#16a34a', fontSize: 12, fontWeight: '700' },
   meta: { marginTop: 8, color: '#94a3b8', fontSize: 12, fontWeight: '600' },
+  baseFareBanner: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  baseFareLabel: { fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.3 },
+  baseFareValue: { marginTop: 4, fontSize: 17, fontWeight: '900', color: '#0f172a' },
+  baseFareHint: { marginTop: 4, fontSize: 11, color: '#64748b', fontWeight: '600' },
   headerBtns: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   sortBtn: {
     backgroundColor: '#111827',

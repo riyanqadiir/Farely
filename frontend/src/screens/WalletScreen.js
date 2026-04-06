@@ -2,13 +2,15 @@ import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import farelyApi from '../api/farelyApi';
 import { AuthContext } from '../context/AuthContext';
+import { pushAppNotification } from '../utils/notifications';
 
-const WalletScreen = () => {
+const WalletScreen = ({ navigation, route }) => {
   const [balance, setBalance] = useState(0);
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState([]);
   const { user } = useContext(AuthContext);
+  const openedFromMenu = !!route?.params?.fromMenu;
 
   useEffect(() => {
     fetchWalletData();
@@ -30,10 +32,22 @@ const WalletScreen = () => {
     setLoading(true);
     try {
       await farelyApi.post('/wallet/topup', { amount: parseInt(amount), method: 'JazzCash' });
+      pushAppNotification({
+        type: 'transaction',
+        title: 'Wallet top-up successful',
+        body: `Added PKR ${parseInt(amount, 10)} to wallet.`,
+        meta: { amount: parseInt(amount, 10), method: 'JazzCash' },
+      });
       setAmount('');
       fetchWalletData();
       alert('Top-up successful!');
     } catch (err) {
+      pushAppNotification({
+        type: 'transaction',
+        title: 'Wallet top-up failed',
+        body: 'Top-up request failed. Please try again.',
+        meta: {},
+      });
       alert('Top-up failed');
     }
     setLoading(false);
@@ -41,6 +55,15 @@ const WalletScreen = () => {
 
   return (
     <View style={styles.container}>
+      {openedFromMenu && (
+        <View style={styles.inlineHeader}>
+          <TouchableOpacity onPress={() => navigation.navigate('Menu')} style={styles.inlineBackBtn}>
+            <Text style={styles.inlineBackText}>Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.inlineHeaderTitle}>Wallet</Text>
+          <View style={{ width: 64 }} />
+        </View>
+      )}
       <View style={styles.balanceCard}>
         <Text style={styles.balanceLabel}>Current Balance</Text>
         <Text style={styles.balanceAmount}>PKR {balance}</Text>
@@ -82,6 +105,24 @@ const WalletScreen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f6fa', padding: 20 },
+  inlineHeader: {
+    marginTop: 10,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inlineBackBtn: {
+    width: 64,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  inlineBackText: { color: '#2563eb', fontWeight: '800', fontSize: 12 },
+  inlineHeaderTitle: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
   balanceCard: { backgroundColor: '#2ecc71', padding: 30, borderRadius: 15, alignItems: 'center', marginBottom: 25 },
   balanceLabel: { color: '#fff', fontSize: 16 },
   balanceAmount: { color: '#fff', fontSize: 36, fontWeight: 'bold', marginTop: 10 },

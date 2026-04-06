@@ -5,6 +5,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { authApi } from '../api/auth';
 
 export const AuthContext = createContext();
+const PROFILE_ONBOARDED_KEY = 'profileOnboarded';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -30,7 +31,18 @@ export const AuthProvider = ({ children }) => {
         const res = await authApi.getMe();
         setUser(res.data?.user ?? res.data);
         const pending = await AsyncStorage.getItem('pendingProfileComplete');
-        setPendingProfileCompleteState(pending === 'true');
+        const onboarded = await AsyncStorage.getItem(PROFILE_ONBOARDED_KEY);
+        // If no explicit pending flag exists, send only first-time users to profile flow.
+        if (pending === null) {
+          const shouldCompleteProfile = onboarded !== 'true';
+          await AsyncStorage.setItem(
+            'pendingProfileComplete',
+            shouldCompleteProfile ? 'true' : 'false'
+          );
+          setPendingProfileCompleteState(shouldCompleteProfile);
+        } else {
+          setPendingProfileCompleteState(pending === 'true');
+        }
       } else {
         setUser(null);
         setPendingProfileCompleteState(false);
@@ -53,6 +65,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await authApi.login({ loginId, password });
       await AsyncStorage.setItem('token', res.data.token);
+      const onboarded = await AsyncStorage.getItem(PROFILE_ONBOARDED_KEY);
+      await AsyncStorage.setItem(
+        'pendingProfileComplete',
+        onboarded === 'true' ? 'false' : 'true'
+      );
       await loadUser();
       return { success: true };
     } catch (err) {
@@ -75,6 +92,11 @@ export const AuthProvider = ({ children }) => {
       }
       const res = await authApi.google({ idToken: signInResult.data.idToken });
       await AsyncStorage.setItem('token', res.data.token);
+      const onboarded = await AsyncStorage.getItem(PROFILE_ONBOARDED_KEY);
+      await AsyncStorage.setItem(
+        'pendingProfileComplete',
+        onboarded === 'true' ? 'false' : 'true'
+      );
       await loadUser();
       return { success: true };
     } catch (err) {
@@ -88,7 +110,9 @@ export const AuthProvider = ({ children }) => {
       await GoogleSignin.signOut();
     } catch (_) {}
     await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem('pendingProfileComplete');
     setUser(null);
+    setPendingProfileCompleteState(false);
   };
 
   return (

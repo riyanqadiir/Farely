@@ -20,8 +20,22 @@ import ChatScreen from './src/screens/ChatScreen';
 import PaymentScreen from './src/screens/PaymentScreen';
 import WalletScreen from './src/screens/WalletScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import NotificationScreen from './src/screens/NotificationScreen';
+import LocationSearchScreen from './src/screens/LocationSearchScreen';
+import MenuScreen from './src/screens/MenuScreen';
+import AboutScreen from './src/screens/AboutScreen';
+import AccountSettingsScreen from './src/screens/AccountSettingsScreen';
+import PaymentMethodsScreen from './src/screens/PaymentMethodsScreen';
+import CardSettingsScreen from './src/screens/CardSettingsScreen';
+import AppSettingsScreen from './src/screens/AppSettingsScreen';
+import HelpSupportScreen from './src/screens/HelpSupportScreen';
+import TermsScreen from './src/screens/TermsScreen';
+import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
 import { ActivityIndicator, View } from 'react-native';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+import { RideWidgetProvider } from './src/context/RideWidgetContext';
+import RideWidget from './src/components/RideWidget';
+import { navigationRef } from './src/navigation/rootNavigation';
 
 const TAB_ICON_SIZE = 24;
 
@@ -99,7 +113,7 @@ const AppNavigator = () => {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <Stack.Navigator
           screenOptions={screenOptions}
           initialRouteName={user ? initialUserRoute : initialAuthRoute}
@@ -111,6 +125,20 @@ const AppNavigator = () => {
               <Stack.Screen name="RideOptions" component={RideOptionsScreen} />
               <Stack.Screen name="Chat" component={ChatScreen} />
               <Stack.Screen name="Payment" component={PaymentScreen} />
+              <Stack.Screen name="Notification" component={NotificationScreen} />
+              <Stack.Screen name="LocationSearch" component={LocationSearchScreen} />
+              <Stack.Screen name="Menu" component={MenuScreen} />
+              <Stack.Screen name="About" component={AboutScreen} />
+              <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+              <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />
+              <Stack.Screen name="CardSettings" component={CardSettingsScreen} />
+              <Stack.Screen name="AppSettings" component={AppSettingsScreen} />
+              <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+              <Stack.Screen name="Terms" component={TermsScreen} />
+              <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+              <Stack.Screen name="ForgotPasswordSend" component={ForgotPasswordSendScreen} />
+              <Stack.Screen name="VerifyOtp" component={VerifyOtpScreen} />
+              <Stack.Screen name="ForgotPasswordSetNew" component={ForgotPasswordSetNewScreen} />
             </>
           ) : (
             <>
@@ -127,6 +155,7 @@ const AppNavigator = () => {
             </>
           )}
         </Stack.Navigator>
+        <RideWidget navigationRef={navigationRef} />
       </NavigationContainer>
     </SafeAreaProvider>
   );
@@ -135,7 +164,9 @@ const AppNavigator = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <AppNavigator />
+      <RideWidgetProvider>
+        <AppNavigator />
+      </RideWidgetProvider>
     </AuthProvider>
   );
 }
