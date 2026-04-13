@@ -30,7 +30,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.farely.app"
+      "bundleIdentifier": "com.farely.app",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["tel", "telprompt"]
+      }
     },
     "android": {
       "adaptiveIcon": {

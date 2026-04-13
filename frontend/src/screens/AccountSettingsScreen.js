@@ -56,8 +56,8 @@ const AccountSettingsScreen = ({ navigation }) => {
           <Row
             icon="key"
             label="Change password"
-            subtitle="OTP verification required"
-            onPress={() => navigation.navigate('ForgotPasswordSend')}
+            subtitle="Current password and new password"
+            onPress={() => navigation.navigate('ChangePassword')}
           />
           <View style={styles.divider} />
           <Row
@@ -69,8 +69,8 @@ const AccountSettingsScreen = ({ navigation }) => {
         </View>
 
         <Text style={styles.note}>
-          For your security, password changes use a one-time code sent to your email or phone. Two-factor
-          authentication may be added in a future update.
+          Change password (signed in) uses your current password. If you are signed out, use Forgot password on
+          the login screen — that flow uses email or phone OTP and is a separate API.
         </Text>
       </ScrollView>
     </SafeAreaView>

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,79 +13,93 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { useFocusEffect } from '@react-navigation/native';
-import { getPaymentMethods, addPaymentMethod } from '../utils/paymentMethodsStorage';
-
-const BRANDS = [
-  { id: 'visa', label: 'Visa' },
-  { id: 'mastercard', label: 'Mastercard' },
-];
+import { CardField, useStripe } from '@stripe/stripe-react-native';
+import { runAfterNavigationTransition } from '../utils/navigationTiming';
+import { fetchPaymentMethods, createPaymentMethod } from '../api/paymentMethods';
+import Constants from 'expo-constants';
 
 const PaymentMethodsScreen = ({ navigation }) => {
+  const { createPaymentMethod: createStripePaymentMethod } = useStripe();
+  const stripePublishableKey =
+    process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
+    Constants?.expoConfig?.extra?.stripePublishableKey ||
+    '';
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [brand, setBrand] = useState('visa');
   const [label, setLabel] = useState('');
-  const [last4, setLast4] = useState('');
-  const [expMonth, setExpMonth] = useState('');
-  const [expYear, setExpYear] = useState('');
+  const [cardComplete, setCardComplete] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const list = await getPaymentMethods();
-    if (list.length === 0) {
-      await addPaymentMethod({
-        brand: 'visa',
-        last4: '4242',
-        expMonth: '12',
-        expYear: '28',
-        label: 'Personal',
-        isDefault: true,
-      });
-      setCards(await getPaymentMethods());
-    } else {
+  const load = useCallback(async (opts = { showSpinner: true }) => {
+    if (opts.showSpinner) setLoading(true);
+    try {
+      const list = await fetchPaymentMethods();
       setCards(list);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      let cancelled = false;
+      const cancelTransition = runAfterNavigationTransition(() => {
+        if (cancelled) return;
+        const showSpinner = !hasLoadedRef.current;
+        hasLoadedRef.current = true;
+        load({ showSpinner });
+      });
+      return () => {
+        cancelled = true;
+        cancelTransition?.();
+      };
     }, [load])
   );
 
   const openAdd = () => {
-    setBrand('visa');
     setLabel('');
-    setLast4('');
-    setExpMonth('');
-    setExpYear('');
+    setCardComplete(false);
     setModalOpen(true);
   };
 
   const saveCard = async () => {
-    const l4 = last4.replace(/\D/g, '').slice(0, 4);
-    const m = expMonth.replace(/\D/g, '').slice(0, 2);
-    const y = expYear.replace(/\D/g, '').slice(0, 2);
     if (!label.trim()) return Alert.alert('Missing label', 'Enter a name for this card.');
-    if (l4.length !== 4) return Alert.alert('Invalid card', 'Enter the last 4 digits.');
-    if (!m || Number(m) < 1 || Number(m) > 12) return Alert.alert('Invalid expiry', 'Enter month 01–12.');
-    if (!y || y.length !== 2) return Alert.alert('Invalid expiry', 'Enter 2-digit year (e.g. 28).');
+    if (!cardComplete) return Alert.alert('Card incomplete', 'Please enter complete card details.');
+    if (!stripePublishableKey) {
+      return Alert.alert(
+        'Stripe not configured',
+        'Missing EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY. Restart Metro after updating frontend/.env.'
+      );
+    }
 
     setSaving(true);
     try {
-      await addPaymentMethod({
-        brand,
-        last4: l4,
-        expMonth: m.padStart(2, '0'),
-        expYear: y,
+      const { paymentMethod, error } = await createStripePaymentMethod({
+        paymentMethodType: 'Card',
+        paymentMethodData: {
+          billingDetails: {
+            name: label.trim(),
+          },
+        },
+      });
+
+      if (error) {
+        Alert.alert('Stripe error', error.message || 'Could not create card.');
+        return;
+      }
+      if (!paymentMethod?.id) {
+        Alert.alert('Card error', 'No payment method was returned by Stripe.');
+        return;
+      }
+
+      await createPaymentMethod({
         label: label.trim(),
-        isDefault: cards.length === 0,
+        stripePaymentMethodId: paymentMethod.id,
       });
       setModalOpen(false);
-      await load();
+      await load({ showSpinner: false });
     } finally {
       setSaving(false);
     }
@@ -104,8 +118,8 @@ const PaymentMethodsScreen = ({ navigation }) => {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
-          Cards saved here are used for ride payments in the app. For this demo, details are stored only on
-          the device (not sent to a payment processor).
+          Add real test cards here using Stripe CardField. Cards are tokenized and only safe metadata is stored in the
+          backend.
         </Text>
 
         {loading ? (
@@ -151,7 +165,7 @@ const PaymentMethodsScreen = ({ navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Add card</Text>
-            <Text style={styles.modalHint}>Demo only — no real card numbers.</Text>
+            <Text style={styles.modalHint}>Enter card details (test mode supported).</Text>
 
             <Text style={styles.fieldLabel}>Label</Text>
             <TextInput
@@ -161,53 +175,20 @@ const PaymentMethodsScreen = ({ navigation }) => {
               onChangeText={setLabel}
             />
 
-            <Text style={styles.fieldLabel}>Brand</Text>
-            <View style={styles.brandRow}>
-              {BRANDS.map((b) => (
-                <TouchableOpacity
-                  key={b.id}
-                  style={[styles.brandChip, brand === b.id && styles.brandChipOn]}
-                  onPress={() => setBrand(b.id)}
-                >
-                  <Text style={[styles.brandChipText, brand === b.id && styles.brandChipTextOn]}>{b.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.fieldLabel}>Last 4 digits</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="4242"
-              keyboardType="number-pad"
-              maxLength={4}
-              value={last4}
-              onChangeText={(t) => setLast4(t.replace(/\D/g, '').slice(0, 4))}
+            <Text style={styles.fieldLabel}>Card details</Text>
+            <CardField
+              postalCodeEnabled={false}
+              placeholders={{ number: '4242 4242 4242 4242' }}
+              cardStyle={{
+                backgroundColor: '#ffffff',
+                textColor: '#0f172a',
+                borderColor: '#e2e8f0',
+                borderWidth: 1,
+                borderRadius: 10,
+              }}
+              style={styles.cardField}
+              onCardChange={(details) => setCardComplete(!!details?.complete)}
             />
-
-            <View style={styles.expRow}>
-              <View style={styles.expCol}>
-                <Text style={styles.fieldLabel}>MM</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="12"
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  value={expMonth}
-                  onChangeText={(t) => setExpMonth(t.replace(/\D/g, '').slice(0, 2))}
-                />
-              </View>
-              <View style={styles.expCol}>
-                <Text style={styles.fieldLabel}>YY</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="28"
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  value={expYear}
-                  onChangeText={(t) => setExpYear(t.replace(/\D/g, '').slice(0, 2))}
-                />
-              </View>
-            </View>
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setModalOpen(false)}>
@@ -311,20 +292,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0f172a',
   },
-  brandRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  brandChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#fff',
+  cardField: {
+    width: '100%',
+    height: 46,
+    marginTop: 6,
   },
-  brandChipOn: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
-  brandChipText: { fontSize: 13, fontWeight: '700', color: '#64748b' },
-  brandChipTextOn: { color: '#2563eb' },
-  expRow: { flexDirection: 'row', gap: 12 },
-  expCol: { flex: 1 },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 20 },
   modalCancel: {
     flex: 1,

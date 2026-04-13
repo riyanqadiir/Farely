@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Alert, Linking, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { pushAppNotification } from '../utils/notifications';
+import { openPhoneDialer } from '../utils/phoneDialer';
 import { useRideWidget } from '../context/RideWidgetContext';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -20,6 +21,8 @@ const ChatScreen = ({ navigation, route }) => {
   const rideOption = route?.params?.rideOption ?? null;
   const pickup = route?.params?.pickup ?? '';
   const destination = route?.params?.destination ?? '';
+  const selectedPaymentMethod = route?.params?.selectedPaymentMethod || 'cash';
+  const selectedPaymentMethodId = route?.params?.selectedPaymentMethodId || null;
 
   const driver = booking?.driver ?? rideOption?.driver ?? null;
   const driverPhone = driver?.phone || rideOption?.rider?.phone || '';
@@ -56,9 +59,12 @@ const ChatScreen = ({ navigation, route }) => {
       pickup,
       destination,
       fare,
+      paymentMethod: selectedPaymentMethod,
+      paymentMethodId: selectedPaymentMethodId,
+      paymentMethodLabel: selectedPaymentMethod === 'card' ? 'Card' : selectedPaymentMethod === 'wallet' ? 'Wallet' : 'Cash',
       expiresAt: Date.now() + 5 * 60 * 1000,
     });
-  }, [booking?.rideId, destination, driverName, driverPhone, fare, numberPlate, pickup, provider, rideOption?.id, startRideWidget]);
+  }, [booking?.rideId, destination, driverName, driverPhone, fare, numberPlate, pickup, provider, rideOption?.id, selectedPaymentMethod, selectedPaymentMethodId, startRideWidget]);
 
   useEffect(() => {
     islandAnim.setValue(0);
@@ -87,21 +93,17 @@ const ChatScreen = ({ navigation, route }) => {
   }, [driverName, islandAnim, provider]);
 
   const handleCall = async () => {
-    if (!driverPhone) return Alert.alert('No phone number', 'Rider phone number is missing.');
-    const url = `tel:${driverPhone}`;
-    try {
-      const ok = await Linking.canOpenURL(url);
-      if (!ok) return Alert.alert('Cannot call', 'Calling is not available on this device.');
-      await Linking.openURL(url);
-      pushAppNotification({
-        type: 'driver',
-        title: 'Call started',
-        body: `Calling rider ${driverName}.`,
-        meta: { driverPhone },
-      });
-    } catch (_) {
-      Alert.alert('Cannot call', 'Calling failed.');
+    if (!driverPhone) return Alert.alert('No phone number', 'Driver phone number is missing.');
+    const result = await openPhoneDialer(driverPhone);
+    if (!result.ok) {
+      return Alert.alert('Cannot call', 'Unable to open the Phone app with this number.');
     }
+    pushAppNotification({
+      type: 'driver',
+      title: 'Call started',
+      body: `Calling ${driverName}.`,
+      meta: { driverPhone },
+    });
   };
 
   const handleWhatsApp = async () => {
@@ -134,24 +136,28 @@ const ChatScreen = ({ navigation, route }) => {
         driverPhone,
         numberPlate,
         rideId: rideOption?.id || booking?.rideId || null,
+        paymentMethod: selectedPaymentMethod,
+        paymentMethodId: selectedPaymentMethodId,
       },
       rideId: rideOption?.id || booking?.rideId || null,
+      selectedPaymentMethod,
+      selectedPaymentMethodId,
     });
   };
 
-  const goToRideScreen = () => {
+  const goToRideScreen = useCallback(() => {
     navigation.navigate('Main', { screen: 'Rides' });
-  };
+  }, [navigation]);
 
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       const onBackPress = () => {
         goToRideScreen();
         return true;
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
       return () => sub.remove();
-    }, [navigation])
+    }, [goToRideScreen])
   );
 
   const islandWidth = islandAnim.interpolate({ inputRange: [0, 1], outputRange: [300, 170] });

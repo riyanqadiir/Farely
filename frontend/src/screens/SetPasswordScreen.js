@@ -19,7 +19,7 @@ const SetPasswordScreen = ({ route, navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { authApi, loadUser, setPendingProfileComplete } = useContext(AuthContext);
+  const { authApi, loadUser } = useContext(AuthContext);
 
   const handleSetPassword = async () => {
     const p = password.trim();
@@ -36,7 +36,6 @@ const SetPasswordScreen = ({ route, navigation }) => {
         confirmPassword: cp,
       });
       await AsyncStorage.setItem('token', res.data.token);
-      setPendingProfileComplete?.(true);
       await loadUser();
     } catch (err) {
       alert(err.response?.data?.message || 'Could not set password.');

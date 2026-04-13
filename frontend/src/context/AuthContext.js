@@ -5,7 +5,34 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { authApi } from '../api/auth';
 
 export const AuthContext = createContext();
-const PROFILE_ONBOARDED_KEY = 'profileOnboarded';
+
+/** @deprecated Legacy single-key flag; prefer per-user keys. */
+const LEGACY_PROFILE_ONBOARDED_KEY = 'profileOnboarded';
+
+function userIdFromUser(u) {
+  if (!u) return null;
+  const id = u.id ?? u._id;
+  return id != null ? String(id) : null;
+}
+
+function profileOnboardedKeyForUser(userId) {
+  return userId ? `profileOnboarded:${userId}` : LEGACY_PROFILE_ONBOARDED_KEY;
+}
+
+/** Whether this account has finished the one-time profile step (device-local). */
+async function readProfileOnboardedFlag(user) {
+  const uid = userIdFromUser(user);
+  if (!uid) return false;
+  const keyed = await AsyncStorage.getItem(profileOnboardedKeyForUser(uid));
+  if (keyed === 'true') return true;
+  const legacy = await AsyncStorage.getItem(LEGACY_PROFILE_ONBOARDED_KEY);
+  if (legacy === 'true') {
+    await AsyncStorage.setItem(profileOnboardedKeyForUser(uid), 'true');
+    await AsyncStorage.removeItem(LEGACY_PROFILE_ONBOARDED_KEY);
+    return true;
+  }
+  return false;
+}
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -29,20 +56,10 @@ export const AuthProvider = ({ children }) => {
       const token = await AsyncStorage.getItem('token');
       if (token) {
         const res = await authApi.getMe();
-        setUser(res.data?.user ?? res.data);
-        const pending = await AsyncStorage.getItem('pendingProfileComplete');
-        const onboarded = await AsyncStorage.getItem(PROFILE_ONBOARDED_KEY);
-        // If no explicit pending flag exists, send only first-time users to profile flow.
-        if (pending === null) {
-          const shouldCompleteProfile = onboarded !== 'true';
-          await AsyncStorage.setItem(
-            'pendingProfileComplete',
-            shouldCompleteProfile ? 'true' : 'false'
-          );
-          setPendingProfileCompleteState(shouldCompleteProfile);
-        } else {
-          setPendingProfileCompleteState(pending === 'true');
-        }
+        const u = res.data?.user ?? res.data;
+        setUser(u);
+        const onboarded = await readProfileOnboardedFlag(u);
+        setPendingProfileCompleteState(!onboarded);
       } else {
         setUser(null);
         setPendingProfileCompleteState(false);
@@ -55,21 +72,30 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  /**
+   * Mark the one-time profile step complete for this account (device-local).
+   * Pass `userId` string after signup save so we do not rely on a stale `user` ref.
+   */
+  const markProfileOnboardingDone = async (userOrId) => {
+    let uid = null;
+    if (typeof userOrId === 'string' && userOrId) uid = userOrId;
+    else if (userOrId && typeof userOrId === 'object') uid = userIdFromUser(userOrId);
+    else uid = userIdFromUser(user);
+    if (uid) {
+      await AsyncStorage.setItem(profileOnboardedKeyForUser(uid), 'true');
+      await AsyncStorage.removeItem(LEGACY_PROFILE_ONBOARDED_KEY);
+    }
+    setPendingProfileCompleteState(false);
+  };
+
   const setPendingProfileComplete = (value) => {
     setPendingProfileCompleteState(!!value);
-    if (value) AsyncStorage.setItem('pendingProfileComplete', 'true');
-    else AsyncStorage.removeItem('pendingProfileComplete');
   };
 
   const login = async (loginId, password) => {
     try {
       const res = await authApi.login({ loginId, password });
       await AsyncStorage.setItem('token', res.data.token);
-      const onboarded = await AsyncStorage.getItem(PROFILE_ONBOARDED_KEY);
-      await AsyncStorage.setItem(
-        'pendingProfileComplete',
-        onboarded === 'true' ? 'false' : 'true'
-      );
       await loadUser();
       return { success: true };
     } catch (err) {
@@ -92,16 +118,21 @@ export const AuthProvider = ({ children }) => {
       }
       const res = await authApi.google({ idToken: signInResult.data.idToken });
       await AsyncStorage.setItem('token', res.data.token);
-      const onboarded = await AsyncStorage.getItem(PROFILE_ONBOARDED_KEY);
-      await AsyncStorage.setItem(
-        'pendingProfileComplete',
-        onboarded === 'true' ? 'false' : 'true'
-      );
       await loadUser();
       return { success: true };
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || 'Google Sign-In failed.';
-      return { success: false, msg };
+      const raw = err.response?.data?.message || err.message || 'Google Sign-In failed.';
+      const combined = `${raw} ${err?.code ?? ''}`;
+      if (/DEVELOPER_ERROR|developer_error|code.*10/i.test(combined)) {
+        return {
+          success: false,
+          msg:
+            'Google Sign-In is not configured for this Android build. In Google Cloud Console, add an OAuth '
+            + '"Android" client with package com.farely.app and your debug keystore SHA-1, then rebuild the app. '
+            + 'See docs/GOOGLE_SSO_SETUP.md',
+        };
+      }
+      return { success: false, msg: raw };
     }
   };
 
@@ -127,6 +158,7 @@ export const AuthProvider = ({ children }) => {
         authApi,
         pendingProfileComplete,
         setPendingProfileComplete,
+        markProfileOnboardingDone,
       }}
     >
       {children}

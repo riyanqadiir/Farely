@@ -15,6 +15,7 @@ import farelyApi from '../api/farelyApi';
 import { getProviderLogo } from '../constants/brandAssets';
 import { pushAppNotification } from '../utils/notifications';
 import { useRideWidget } from '../context/RideWidgetContext';
+import { fetchPaymentMethods } from '../api/paymentMethods';
 
 const RideOptionsScreen = ({ navigation, route }) => {
   const pickup = route?.params?.pickup ?? '';
@@ -30,6 +31,9 @@ const RideOptionsScreen = ({ navigation, route }) => {
   const [fares, setFares] = useState(incomingFares);
   const [bookingLoadingId, setBookingLoadingId] = useState(null);
   const [bookingStatus, setBookingStatus] = useState('');
+  const [selectedMethod, setSelectedMethod] = useState('cash');
+  const [selectedCardId, setSelectedCardId] = useState(null);
+  const [cards, setCards] = useState([]);
   const { startRideWidget } = useRideWidget();
 
   const mountedRef = useRef(true);
@@ -43,6 +47,22 @@ const RideOptionsScreen = ({ navigation, route }) => {
   useEffect(() => {
     setFares(incomingFares);
   }, [incomingFares]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const list = await fetchPaymentMethods();
+        if (!mounted) return;
+        setCards(list);
+        const defaultCard = list.find((c) => c.isDefault) || list[0] || null;
+        setSelectedCardId(defaultCard?.id || null);
+      } catch (_) {}
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const sortedFares = useMemo(() => {
     const list = Array.isArray(fares) ? [...fares] : [];
@@ -67,11 +87,20 @@ const RideOptionsScreen = ({ navigation, route }) => {
   const handleBook = async (rideOption) => {
     const id = rideOption?.id;
     if (!id || bookingLoadingId) return;
+    if (selectedMethod === 'card' && !selectedCardId) {
+      Alert.alert('Card required', 'Please add/select a card before booking with card.');
+      return;
+    }
 
     setBookingLoadingId(id);
     setBookingStatus('Assigning driver...');
     try {
-      const res = await farelyApi.post('/rides/compare', { rideId: id, action: 'book' });
+      const res = await farelyApi.post('/rides/compare', {
+        rideId: id,
+        action: 'book',
+        paymentMethod: selectedMethod,
+        paymentMethodId: selectedMethod === 'card' ? selectedCardId : null,
+      });
       const { driver, driverLocation, status } = res.data || {};
 
       if (!mountedRef.current) return;
@@ -87,6 +116,14 @@ const RideOptionsScreen = ({ navigation, route }) => {
         pickup,
         destination,
         fare: typeof rideOption?.fare === 'number' ? rideOption.fare : null,
+        paymentMethod: selectedMethod,
+        paymentMethodId: selectedMethod === 'card' ? selectedCardId : null,
+        paymentMethodLabel:
+          selectedMethod === 'card'
+            ? `Card ${cards.find((c) => c.id === selectedCardId)?.last4 || ''}`.trim()
+            : selectedMethod === 'wallet'
+              ? 'Wallet'
+              : 'Cash',
         expiresAt: Date.now() + 5 * 60 * 1000,
       });
       pushAppNotification({
@@ -101,6 +138,8 @@ const RideOptionsScreen = ({ navigation, route }) => {
         rideOption,
         pickup,
         destination,
+        selectedPaymentMethod: selectedMethod,
+        selectedPaymentMethodId: selectedMethod === 'card' ? selectedCardId : null,
       });
     } catch (err) {
       const msg = err.response?.data?.msg || err.response?.data?.message || 'Booking failed';
@@ -158,6 +197,38 @@ const RideOptionsScreen = ({ navigation, route }) => {
                 <Text style={styles.changeBtnText}>Change</Text>
               </TouchableOpacity>
             </View>
+          </View>
+          <View style={styles.paymentChoiceCard}>
+            <Text style={styles.paymentChoiceTitle}>Pay for this ride with</Text>
+            <View style={styles.paymentChoices}>
+              {['cash', 'card', 'wallet'].map((m) => (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.paymentChip, selectedMethod === m ? styles.paymentChipOn : null]}
+                  onPress={() => setSelectedMethod(m)}
+                >
+                  <Text style={[styles.paymentChipText, selectedMethod === m ? styles.paymentChipTextOn : null]}>
+                    {m.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {selectedMethod === 'card' && (
+              <View style={styles.cardPickRow}>
+                {cards.map((card) => (
+                  <TouchableOpacity
+                    key={card.id}
+                    style={[styles.cardPick, selectedCardId === card.id ? styles.cardPickOn : null]}
+                    onPress={() => setSelectedCardId(card.id)}
+                  >
+                    <Text style={styles.cardPickText}>
+                      {card.brand?.toUpperCase()} •••• {card.last4}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                {!cards.length && <Text style={styles.noCardText}>No card saved. Add from Payment Methods.</Text>}
+              </View>
+            )}
           </View>
         </View>
 
@@ -260,6 +331,32 @@ const styles = StyleSheet.create({
   baseFareValue: { marginTop: 4, fontSize: 17, fontWeight: '900', color: '#0f172a' },
   baseFareHint: { marginTop: 4, fontSize: 11, color: '#64748b', fontWeight: '600' },
   headerBtns: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  paymentChoiceCard: {
+    marginTop: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+  },
+  paymentChoiceTitle: { fontSize: 11, fontWeight: '800', color: '#64748b' },
+  paymentChoices: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  paymentChip: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#fff',
+  },
+  paymentChipOn: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
+  paymentChipText: { fontWeight: '800', fontSize: 11, color: '#475569' },
+  paymentChipTextOn: { color: '#1d4ed8' },
+  cardPickRow: { marginTop: 8, gap: 6 },
+  cardPick: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, backgroundColor: '#fff', padding: 8 },
+  cardPickOn: { borderColor: '#2563eb', backgroundColor: '#dbeafe' },
+  cardPickText: { fontSize: 11, fontWeight: '700', color: '#0f172a' },
+  noCardText: { fontSize: 11, color: '#dc2626', fontWeight: '700' },
   sortBtn: {
     backgroundColor: '#111827',
     minWidth: 58,

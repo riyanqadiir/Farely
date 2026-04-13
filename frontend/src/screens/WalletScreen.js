@@ -3,12 +3,16 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Activity
 import farelyApi from '../api/farelyApi';
 import { AuthContext } from '../context/AuthContext';
 import { pushAppNotification } from '../utils/notifications';
+import { fetchPaymentMethods } from '../api/paymentMethods';
 
 const WalletScreen = ({ navigation, route }) => {
   const [balance, setBalance] = useState(0);
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState([]);
+  const [cards, setCards] = useState([]);
+  const [selectedCardId, setSelectedCardId] = useState(null);
+  const [lastReceipt, setLastReceipt] = useState(null);
   const { user } = useContext(AuthContext);
   const openedFromMenu = !!route?.params?.fromMenu;
 
@@ -22,6 +26,10 @@ const WalletScreen = ({ navigation, route }) => {
       setBalance(balRes.data.balance);
       const histRes = await farelyApi.get('/wallet/history');
       setHistory(histRes.data);
+      const methods = await fetchPaymentMethods();
+      setCards(methods);
+      const defaultCard = methods.find((m) => m.isDefault) || methods[0] || null;
+      setSelectedCardId(defaultCard?.id || null);
     } catch (err) {
       console.log('Error fetching wallet data');
     }
@@ -31,12 +39,22 @@ const WalletScreen = ({ navigation, route }) => {
     if (!amount || isNaN(amount)) return alert('Enter valid amount');
     setLoading(true);
     try {
-      await farelyApi.post('/wallet/topup', { amount: parseInt(amount), method: 'JazzCash' });
+      if (!selectedCardId) {
+        alert('Please add a card first in Payment Methods.');
+        return;
+      }
+      const topupRes = await farelyApi.post('/wallet/topup', {
+        amount: parseInt(amount, 10),
+        method: 'card',
+        paymentMethodId: selectedCardId,
+      });
+      const tx = topupRes.data?.transaction;
+      setLastReceipt(tx || null);
       pushAppNotification({
         type: 'transaction',
         title: 'Wallet top-up successful',
         body: `Added PKR ${parseInt(amount, 10)} to wallet.`,
-        meta: { amount: parseInt(amount, 10), method: 'JazzCash' },
+        meta: { amount: parseInt(amount, 10), method: 'card' },
       });
       setAmount('');
       fetchWalletData();
@@ -45,12 +63,13 @@ const WalletScreen = ({ navigation, route }) => {
       pushAppNotification({
         type: 'transaction',
         title: 'Wallet top-up failed',
-        body: 'Top-up request failed. Please try again.',
-        meta: {},
+        body: err.response?.data?.message || 'Top-up request failed. Please try again.',
+        meta: { selectedCardId },
       });
-      alert('Top-up failed');
+      alert(err.response?.data?.message || 'Top-up failed');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -77,10 +96,35 @@ const WalletScreen = ({ navigation, route }) => {
           onChangeText={setAmount}
           keyboardType="numeric"
         />
-        <TouchableOpacity style={styles.topupBtn} onPress={handleTopup} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.topupBtnText}>Top-up with JazzCash</Text>}
+        <Text style={styles.sectionLabel}>Choose card</Text>
+        <View style={styles.methodsRow}>
+          {cards.map((card) => (
+            <TouchableOpacity
+              key={card.id}
+              style={[styles.methodChip, selectedCardId === card.id ? styles.methodChipSelected : null]}
+              onPress={() => setSelectedCardId(card.id)}
+            >
+              <Text style={styles.methodChipText}>
+                {card.brand?.toUpperCase()} •••• {card.last4}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          {!cards.length && <Text style={styles.emptyText}>No cards saved. Add one in Payment Methods.</Text>}
+        </View>
+        <TouchableOpacity style={styles.topupBtn} onPress={handleTopup} disabled={loading || !cards.length}>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.topupBtnText}>Top-up with Card</Text>}
         </TouchableOpacity>
       </View>
+
+      {!!lastReceipt && (
+        <View style={styles.receiptCard}>
+          <Text style={styles.receiptTitle}>Latest Top-up Receipt</Text>
+          <Text style={styles.receiptLine}>Transaction: {lastReceipt.transactionId}</Text>
+          <Text style={styles.receiptLine}>Method: {lastReceipt.method?.toUpperCase()}</Text>
+          <Text style={styles.receiptLine}>Amount: PKR {lastReceipt.amount}</Text>
+          <Text style={styles.receiptLine}>Status: {lastReceipt.meta?.status || 'succeeded'}</Text>
+        </View>
+      )}
 
       <Text style={styles.historyTitle}>Transaction History</Text>
       <FlatList
@@ -128,8 +172,23 @@ const styles = StyleSheet.create({
   balanceAmount: { color: '#fff', fontSize: 36, fontWeight: 'bold', marginTop: 10 },
   topupSection: { backgroundColor: '#fff', padding: 20, borderRadius: 15, elevation: 2, marginBottom: 25 },
   input: { borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8, marginBottom: 15 },
+  sectionLabel: { fontSize: 12, fontWeight: '800', color: '#64748b', marginBottom: 8 },
+  methodsRow: { gap: 8, marginBottom: 14 },
+  methodChip: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#fff',
+  },
+  methodChipSelected: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
+  methodChipText: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
   topupBtn: { backgroundColor: '#34495e', padding: 15, borderRadius: 8, alignItems: 'center' },
   topupBtnText: { color: '#fff', fontWeight: 'bold' },
+  receiptCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 14 },
+  receiptTitle: { fontSize: 14, fontWeight: '900', color: '#0f172a', marginBottom: 6 },
+  receiptLine: { fontSize: 12, fontWeight: '700', color: '#334155', marginTop: 2 },
   historyTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
   historyItem: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, backgroundColor: '#fff', borderRadius: 10, marginBottom: 10 },
   historyType: { fontWeight: 'bold' },

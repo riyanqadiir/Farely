@@ -12,12 +12,20 @@ async function compare(req, res, next) {
       rideType,
       rideId,
       action,
+      paymentMethod,
+      paymentMethodId,
     } = req.body || {};
 
     const isBookMode = Boolean(rideId) || action === "book";
     if (isBookMode) {
       const data = rideSimulationService.bookRide(rideId);
-      return res.json(data);
+      return res.json({
+        ...data,
+        payment: {
+          method: paymentMethod || "cash",
+          paymentMethodId: paymentMethodId || null,
+        },
+      });
     }
 
     const pickupCoords =

@@ -1,4 +1,8 @@
+import 'react-native-gesture-handler';
 import { registerRootComponent } from 'expo';
+import { enableScreens } from 'react-native-screens';
+
+enableScreens(true);
 
 // Some navigation internals rely on WeakRef; provide a minimal fallback
 // for runtimes that do not expose it yet.

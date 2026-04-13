@@ -25,6 +25,7 @@ import LocationSearchScreen from './src/screens/LocationSearchScreen';
 import MenuScreen from './src/screens/MenuScreen';
 import AboutScreen from './src/screens/AboutScreen';
 import AccountSettingsScreen from './src/screens/AccountSettingsScreen';
+import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
 import PaymentMethodsScreen from './src/screens/PaymentMethodsScreen';
 import CardSettingsScreen from './src/screens/CardSettingsScreen';
 import AppSettingsScreen from './src/screens/AppSettingsScreen';
@@ -36,6 +37,8 @@ import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { RideWidgetProvider } from './src/context/RideWidgetContext';
 import RideWidget from './src/components/RideWidget';
 import { navigationRef } from './src/navigation/rootNavigation';
+import { StripeProvider, initStripe } from '@stripe/stripe-react-native';
+import Constants from 'expo-constants';
 
 const TAB_ICON_SIZE = 24;
 
@@ -54,6 +57,7 @@ function TabIcon({ focused, name }) {
 
 const tabBarScreenOptions = {
   headerShown: false,
+  lazy: true,
   tabBarActiveTintColor: '#2563eb',
   tabBarInactiveTintColor: '#64748b',
   tabBarStyle: {
@@ -107,7 +111,12 @@ const AppNavigator = () => {
     );
   }
 
-  const screenOptions = { headerShown: false };
+  const stackScreenOptions = {
+    headerShown: false,
+    gestureEnabled: true,
+    cardOverlayEnabled: true,
+    detachInactiveScreens: true,
+  };
   const initialAuthRoute = hasSeenOnboarding ? 'Welcome' : 'Onboarding';
   const initialUserRoute = pendingProfileComplete ? 'CompleteProfile' : 'Main';
 
@@ -115,7 +124,8 @@ const AppNavigator = () => {
     <SafeAreaProvider>
       <NavigationContainer ref={navigationRef}>
         <Stack.Navigator
-          screenOptions={screenOptions}
+          key={user ? 'authenticated' : 'unauthenticated'}
+          screenOptions={stackScreenOptions}
           initialRouteName={user ? initialUserRoute : initialAuthRoute}
         >
           {user ? (
@@ -130,6 +140,7 @@ const AppNavigator = () => {
               <Stack.Screen name="Menu" component={MenuScreen} />
               <Stack.Screen name="About" component={AboutScreen} />
               <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+              <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
               <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />
               <Stack.Screen name="CardSettings" component={CardSettingsScreen} />
               <Stack.Screen name="AppSettings" component={AppSettingsScreen} />
@@ -162,11 +173,28 @@ const AppNavigator = () => {
 };
 
 export default function App() {
+  const stripePublishableKey =
+    process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
+    Constants?.expoConfig?.extra?.stripePublishableKey ||
+    '';
+
+  useEffect(() => {
+    if (!stripePublishableKey) {
+      console.warn('Stripe publishable key is missing.');
+      return;
+    }
+    initStripe({ publishableKey: stripePublishableKey }).catch((err) => {
+      console.warn('Stripe init failed', err?.message || err);
+    });
+  }, [stripePublishableKey]);
+
   return (
-    <AuthProvider>
-      <RideWidgetProvider>
-        <AppNavigator />
-      </RideWidgetProvider>
-    </AuthProvider>
+    <StripeProvider publishableKey={stripePublishableKey}>
+      <AuthProvider>
+        <RideWidgetProvider>
+          <AppNavigator />
+        </RideWidgetProvider>
+      </AuthProvider>
+    </StripeProvider>
   );
 }

@@ -1,6 +1,8 @@
 const User = require("../model/User.model");
 const Wallet = require("../model/Wallet.model");
 const Transaction = require("../model/Transaction.model");
+const PaymentMethod = require("../model/PaymentMethod.model");
+const stripeService = require("../services/stripe.service");
 
 async function ensureWallet(userId) {
   const wallet = await Wallet.findOneAndUpdate(
@@ -47,11 +49,15 @@ async function getHistory(req, res, next) {
 async function topup(req, res, next) {
   try {
     const amount = Number(req.body?.amount);
-    const method = req.body?.method || "JazzCash";
+    const method = req.body?.method || "card";
+    const paymentMethodId = req.body?.paymentMethodId || null;
     const transactionId = req.body?.transactionId || `topup_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ success: false, message: "Invalid amount." });
+    }
+    if (!["card"].includes(method)) {
+      return res.status(400).json({ success: false, message: "Top-up currently supports card only." });
     }
 
     // Idempotency: if already exists, return it and do not add balance again.
@@ -62,6 +68,29 @@ async function topup(req, res, next) {
     }
 
     await ensureWallet(req.userId);
+    const userForCharge = await User.findById(req.userId).lean();
+    if (!userForCharge) return res.status(404).json({ success: false, message: "User not found." });
+
+    const selectedMethod =
+      (paymentMethodId &&
+        (await PaymentMethod.findOne({ _id: paymentMethodId, userId: req.userId, isDefault: { $in: [true, false] } }).lean())) ||
+      (await PaymentMethod.findOne({ userId: req.userId, isDefault: true }).lean());
+
+    if (!selectedMethod) {
+      return res.status(400).json({ success: false, message: "Add a card before top-up." });
+    }
+
+    const charge = await stripeService.chargePaymentMethod({
+      user: userForCharge,
+      amountPkr: amount,
+      paymentMethodId: selectedMethod.stripePaymentMethodId,
+      description: "Farely wallet top-up",
+      metadata: { userId: String(req.userId), transactionId, flow: "wallet_topup" },
+    });
+
+    if (charge.status !== "succeeded") {
+      return res.status(402).json({ success: false, message: "Card charge did not succeed." });
+    }
 
     const user = await User.findByIdAndUpdate(
       req.userId,
@@ -77,7 +106,12 @@ async function topup(req, res, next) {
       type: "topup",
       method,
       amount,
-      meta: { label: "Wallet top-up" },
+      meta: {
+        label: "Wallet top-up",
+        status: "succeeded",
+        stripePaymentIntentId: charge.id,
+        paymentMethodId: String(selectedMethod._id),
+      },
     });
 
     return res.json({ success: true, balance: user?.walletBalance || 0, transaction: tx });
@@ -94,7 +128,7 @@ async function topup(req, res, next) {
 
 async function payRide(req, res, next) {
   try {
-    const { transactionId, rideId, method, amount, meta } = req.body || {};
+    const { transactionId, rideId, method, amount, meta, paymentMethodId } = req.body || {};
     const amt = Number(amount);
 
     if (!transactionId || typeof transactionId !== "string") {
@@ -119,19 +153,17 @@ async function payRide(req, res, next) {
 
     await ensureWallet(req.userId);
 
-    // Create transaction first; unique indexes prevent duplicates even under races.
-    const tx = await Transaction.create({
-      userId: req.userId,
-      transactionId,
-      rideId,
-      type: "ride_payment",
-      method,
-      amount: amt,
-      meta: meta || {},
-    });
-
     // If paying with wallet, subtract from balance (and prevent going negative).
     if (method === "wallet") {
+      const tx = await Transaction.create({
+        userId: req.userId,
+        transactionId,
+        rideId,
+        type: "ride_payment",
+        method,
+        amount: amt,
+        meta: { ...(meta || {}), status: "succeeded" },
+      });
       const user = await User.findOneAndUpdate(
         { _id: req.userId, walletBalance: { $gte: amt } },
         { $inc: { walletBalance: -amt } },
@@ -148,6 +180,55 @@ async function payRide(req, res, next) {
       return res.json({ success: true, balance: user.walletBalance || 0, transaction: tx });
     }
 
+    if (method === "card") {
+      const userForCharge = await User.findById(req.userId).lean();
+      const selectedMethod =
+        (paymentMethodId &&
+          (await PaymentMethod.findOne({ _id: paymentMethodId, userId: req.userId, isDefault: { $in: [true, false] } }).lean())) ||
+        (await PaymentMethod.findOne({ userId: req.userId, isDefault: true }).lean());
+      if (!selectedMethod) {
+        return res.status(400).json({ success: false, message: "No saved card found for this payment." });
+      }
+
+      const charge = await stripeService.chargePaymentMethod({
+        user: userForCharge,
+        amountPkr: amt,
+        paymentMethodId: selectedMethod.stripePaymentMethodId,
+        description: "Farely ride payment",
+        metadata: { userId: String(req.userId), transactionId, rideId, flow: "ride_payment" },
+      });
+      if (charge.status !== "succeeded") {
+        return res.status(402).json({ success: false, message: "Card payment failed." });
+      }
+
+      const tx = await Transaction.create({
+        userId: req.userId,
+        transactionId,
+        rideId,
+        type: "ride_payment",
+        method,
+        amount: amt,
+        meta: {
+          ...(meta || {}),
+          status: "succeeded",
+          stripePaymentIntentId: charge.id,
+          paymentMethodId: String(selectedMethod._id),
+        },
+      });
+
+      const user = await User.findById(req.userId).lean();
+      return res.json({ success: true, balance: user?.walletBalance || 0, transaction: tx });
+    }
+
+    const tx = await Transaction.create({
+      userId: req.userId,
+      transactionId,
+      rideId,
+      type: "ride_payment",
+      method,
+      amount: amt,
+      meta: { ...(meta || {}), status: "pending_cash_collection" },
+    });
     const user = await User.findById(req.userId).lean();
     return res.json({ success: true, balance: user?.walletBalance || 0, transaction: tx });
   } catch (err) {

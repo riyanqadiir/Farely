@@ -10,7 +10,6 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 let ImagePicker = null;
 try {
   ImagePicker = require('expo-image-picker');
@@ -28,7 +27,7 @@ const CompleteProfileScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [photoUri, setPhotoUri] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const { user, setPendingProfileComplete, loadUser } = useContext(AuthContext);
+  const { user, loadUser, markProfileOnboardingDone } = useContext(AuthContext);
 
   const profilePhotoUrl = user?.profilePhotoUrl || photoUri;
 
@@ -97,6 +96,8 @@ const CompleteProfileScreen = ({ navigation }) => {
 
   const handleSave = async () => {
     if (!fullName.trim()) return alert('Please enter your full name.');
+    const uid = user?.id || user?._id;
+    if (!uid) return alert('Missing user id. Please sign in again.');
     setLoading(true);
     try {
       await profileApi.updateProfile({
@@ -106,9 +107,8 @@ const CompleteProfileScreen = ({ navigation }) => {
         city: city.trim() || undefined,
         district: district.trim() || undefined,
       });
-      await AsyncStorage.setItem('profileOnboarded', 'true');
+      await markProfileOnboardingDone(String(uid));
       await loadUser?.();
-      setPendingProfileComplete?.(false);
       navigation.replace('Main');
     } catch (err) {
       alert(err.response?.data?.message || 'Could not save profile.');
@@ -118,8 +118,9 @@ const CompleteProfileScreen = ({ navigation }) => {
   };
 
   const handleCancel = async () => {
-    await AsyncStorage.setItem('profileOnboarded', 'true');
-    setPendingProfileComplete?.(false);
+    const uid = user?.id || user?._id;
+    if (uid) await markProfileOnboardingDone(String(uid));
+    else await markProfileOnboardingDone();
     navigation.replace('Main');
   };
 

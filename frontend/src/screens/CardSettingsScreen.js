@@ -13,23 +13,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { useFocusEffect } from '@react-navigation/native';
-import {
-  getPaymentMethods,
-  updatePaymentMethod,
-  removePaymentMethod,
-} from '../utils/paymentMethodsStorage';
+import { runAfterNavigationTransition } from '../utils/navigationTiming';
+import { fetchPaymentMethods, updatePaymentMethod, deletePaymentMethod } from '../api/paymentMethods';
 
 const CardSettingsScreen = ({ navigation, route }) => {
   const cardId = route?.params?.cardId;
   const [card, setCard] = useState(null);
   const [label, setLabel] = useState('');
-  const [expMonth, setExpMonth] = useState('');
-  const [expYear, setExpYear] = useState('');
   const [isDefault, setIsDefault] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
-    const list = await getPaymentMethods();
+    const list = await fetchPaymentMethods();
     const c = list.find((x) => x.id === cardId);
     if (!c) {
       setCard(null);
@@ -37,31 +32,31 @@ const CardSettingsScreen = ({ navigation, route }) => {
     }
     setCard(c);
     setLabel(c.label || '');
-    setExpMonth(c.expMonth || '');
-    setExpYear(c.expYear || '');
     setIsDefault(!!c.isDefault);
   }, [cardId]);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      let cancelled = false;
+      const cancelTransition = runAfterNavigationTransition(() => {
+        if (cancelled) return;
+        load();
+      });
+      return () => {
+        cancelled = true;
+        cancelTransition?.();
+      };
     }, [load])
   );
 
   const save = async () => {
     if (!card) return;
-    const m = expMonth.replace(/\D/g, '').slice(0, 2);
-    const y = expYear.replace(/\D/g, '').slice(0, 2);
     if (!label.trim()) return Alert.alert('Label required');
-    if (!m || Number(m) < 1 || Number(m) > 12) return Alert.alert('Invalid month');
-    if (!y || y.length !== 2) return Alert.alert('Invalid year');
 
     setSaving(true);
     try {
       await updatePaymentMethod(card.id, {
         label: label.trim(),
-        expMonth: m.padStart(2, '0'),
-        expYear: y,
         isDefault,
       });
       Alert.alert('Saved', 'Card settings updated.');
@@ -78,7 +73,7 @@ const CardSettingsScreen = ({ navigation, route }) => {
         text: 'Remove',
         style: 'destructive',
         onPress: async () => {
-          await removePaymentMethod(cardId);
+          await deletePaymentMethod(cardId);
           navigation.goBack();
         },
       },
@@ -128,28 +123,7 @@ const CardSettingsScreen = ({ navigation, route }) => {
         <Text style={styles.fieldLabel}>Card nickname</Text>
         <TextInput style={styles.input} value={label} onChangeText={setLabel} placeholder="Label" />
 
-        <View style={styles.expRow}>
-          <View style={styles.expCol}>
-            <Text style={styles.fieldLabel}>Expiry MM</Text>
-            <TextInput
-              style={styles.input}
-              value={expMonth}
-              onChangeText={(t) => setExpMonth(t.replace(/\D/g, '').slice(0, 2))}
-              keyboardType="number-pad"
-              maxLength={2}
-            />
-          </View>
-          <View style={styles.expCol}>
-            <Text style={styles.fieldLabel}>YY</Text>
-            <TextInput
-              style={styles.input}
-              value={expYear}
-              onChangeText={(t) => setExpYear(t.replace(/\D/g, '').slice(0, 2))}
-              keyboardType="number-pad"
-              maxLength={2}
-            />
-          </View>
-        </View>
+        <Text style={styles.readOnlyHint}>Expiry is managed by the payment provider token for this card.</Text>
 
         <View style={styles.switchRow}>
           <View style={{ flex: 1 }}>
@@ -209,8 +183,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     backgroundColor: '#fff',
   },
-  expRow: { flexDirection: 'row', gap: 12 },
-  expCol: { flex: 1 },
+  readOnlyHint: { marginTop: 8, color: '#64748b', fontSize: 12, fontWeight: '600' },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',

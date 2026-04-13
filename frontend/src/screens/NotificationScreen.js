@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { useFocusEffect } from '@react-navigation/native';
 import { getAppNotifications } from '../utils/notifications';
+import { runAfterNavigationTransition } from '../utils/navigationTiming';
 
 const FALLBACK_ITEMS = [
   {
@@ -53,16 +54,27 @@ const NotificationScreen = ({ navigation }) => {
   const [items, setItems] = useState(FALLBACK_ITEMS);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    setRefreshing(true);
-    const data = await getAppNotifications();
-    setItems(data.length ? data : FALLBACK_ITEMS);
-    setRefreshing(false);
+  const load = useCallback(async (fromPull = false) => {
+    if (fromPull) setRefreshing(true);
+    try {
+      const data = await getAppNotifications();
+      setItems(data.length ? data : FALLBACK_ITEMS);
+    } finally {
+      if (fromPull) setRefreshing(false);
+    }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      let cancelled = false;
+      const cancelTransition = runAfterNavigationTransition(() => {
+        if (cancelled) return;
+        load(false);
+      });
+      return () => {
+        cancelled = true;
+        cancelTransition?.();
+      };
     }, [load])
   );
 
@@ -104,7 +116,9 @@ const NotificationScreen = ({ navigation }) => {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />
+          }
         >
           <Section
             title="Today"

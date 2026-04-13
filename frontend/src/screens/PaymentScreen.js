@@ -4,12 +4,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import farelyApi from '../api/farelyApi';
 import { pushAppNotification } from '../utils/notifications';
 import { useRideWidget } from '../context/RideWidgetContext';
+import { fetchPaymentMethods } from '../api/paymentMethods';
 
 const PaymentScreen = ({ navigation, route }) => {
   const receipt = route?.params?.receipt ?? {};
   const rideId = route?.params?.rideId || receipt.rideId || null;
-  const [method, setMethod] = useState('cash'); // cash | card | wallet
+  const [method, setMethod] = useState(route?.params?.selectedPaymentMethod || receipt.paymentMethod || 'cash');
+  const [paymentMethodId, setPaymentMethodId] = useState(route?.params?.selectedPaymentMethodId || receipt.paymentMethodId || null);
+  const [cards, setCards] = useState([]);
   const [paying, setPaying] = useState(false);
+  const [completedTx, setCompletedTx] = useState(null);
   const transactionIdRef = useRef(null);
   const { clearRideWidget } = useRideWidget();
 
@@ -19,6 +23,24 @@ const PaymentScreen = ({ navigation, route }) => {
       transactionIdRef.current = `pay_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     }
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const methods = await fetchPaymentMethods();
+        if (!mounted) return;
+        setCards(methods);
+        if (method === 'card' && !paymentMethodId) {
+          const defaultCard = methods.find((m) => m.isDefault) || methods[0] || null;
+          setPaymentMethodId(defaultCard?.id || null);
+        }
+      } catch (_) {}
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [method, paymentMethodId]);
 
   const rows = useMemo(
     () => [
@@ -38,6 +60,9 @@ const PaymentScreen = ({ navigation, route }) => {
     const amount = typeof receipt.fare === 'number' ? receipt.fare : null;
     if (!rideId) return Alert.alert('Missing ride id', 'Cannot store payment without ride id.');
     if (!amount) return Alert.alert('Missing fare', 'Cannot store payment without fare amount.');
+    if (method === 'card' && !paymentMethodId) {
+      return Alert.alert('Card missing', 'No card selected for card payment.');
+    }
 
     setPaying(true);
     try {
@@ -46,6 +71,7 @@ const PaymentScreen = ({ navigation, route }) => {
         rideId,
         method,
         amount,
+        paymentMethodId: method === 'card' ? paymentMethodId : null,
         meta: {
           provider: receipt.provider || '',
           pickup: receipt.pickup || '',
@@ -58,6 +84,7 @@ const PaymentScreen = ({ navigation, route }) => {
 
       const res = await farelyApi.post('/wallet/pay', payload);
       const duplicated = !!res.data?.duplicated;
+      setCompletedTx(res.data?.transaction || null);
       clearRideWidget();
       pushAppNotification({
         type: 'transaction',
@@ -118,7 +145,43 @@ const PaymentScreen = ({ navigation, route }) => {
                 <Text style={styles.methodText}>{m.label}</Text>
               </TouchableOpacity>
             ))}
+            {method === 'cash' && (
+              <Text style={styles.cashHint}>Pay driver in cash: PKR {Math.round(receipt.fare || 0)}</Text>
+            )}
+            {method === 'card' && (
+              <View style={{ marginTop: 8, gap: 8 }}>
+                {cards.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.savedCardRow, paymentMethodId === c.id ? styles.savedCardRowOn : null]}
+                    onPress={() => setPaymentMethodId(c.id)}
+                  >
+                    <Text style={styles.savedCardText}>
+                      {c.brand?.toUpperCase()} •••• {c.last4}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
+
+          {!!completedTx && (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Payment receipt</Text>
+              <View style={styles.row}>
+                <Text style={styles.rowKey}>Transaction</Text>
+                <Text style={styles.rowVal}>{completedTx.transactionId}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.rowKey}>Method</Text>
+                <Text style={styles.rowVal}>{completedTx.method?.toUpperCase()}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.rowKey}>Status</Text>
+                <Text style={styles.rowVal}>{completedTx.meta?.status || 'succeeded'}</Text>
+              </View>
+            </View>
+          )}
 
           <TouchableOpacity style={[styles.payBtn, paying ? styles.payBtnDisabled : null]} onPress={confirmPay} disabled={paying}>
             {paying ? <ActivityIndicator color="#fff" /> : <Text style={styles.payBtnText}>Pay now</Text>}
@@ -156,6 +219,10 @@ const styles = StyleSheet.create({
   methodText: { color: '#0f172a', fontWeight: '800' },
   radio: { width: 18, height: 18, borderRadius: 999, borderWidth: 2, borderColor: '#cbd5e1' },
   radioOn: { borderColor: '#2563eb', backgroundColor: '#2563eb' },
+  cashHint: { marginTop: 6, color: '#b45309', fontSize: 12, fontWeight: '700' },
+  savedCardRow: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, padding: 10 },
+  savedCardRowOn: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
+  savedCardText: { color: '#0f172a', fontWeight: '800', fontSize: 12 },
   payBtn: { backgroundColor: '#16a34a', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   payBtnDisabled: { opacity: 0.7 },
   payBtnText: { color: '#fff', fontWeight: '900' },

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
+import { runAfterNavigationTransition } from '../utils/navigationTiming';
 
 const KEYS = {
   pushRide: 'farely_settings_push_ride',
@@ -29,7 +30,15 @@ const AppSettingsScreen = ({ navigation }) => {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      let cancelled = false;
+      const cancelTransition = runAfterNavigationTransition(() => {
+        if (cancelled) return;
+        load();
+      });
+      return () => {
+        cancelled = true;
+        cancelTransition?.();
+      };
     }, [load])
   );
 

@@ -113,6 +113,25 @@ const resendOtp = [
   body("purpose").isIn(["signup", "forgot_password"]).withMessage("Invalid purpose"),
 ];
 
+/** Logged-in user only (Bearer token). Separate from forgot-password / reset-password. */
+const changePassword = [
+  body("currentPassword").notEmpty().withMessage("Current password is required"),
+  body("newPassword")
+    .notEmpty()
+    .withMessage("New password is required")
+    .isLength({ min: 8 })
+    .withMessage("New password must be at least 8 characters")
+    .matches(/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage("New password must contain uppercase, lowercase and number")
+    .custom((value, { req }) => String(value) !== String(req.body.currentPassword))
+    .withMessage("New password must be different from your current password"),
+  body("confirmNewPassword")
+    .notEmpty()
+    .withMessage("Confirm new password is required")
+    .custom((value, { req }) => value === req.body.newPassword)
+    .withMessage("New passwords do not match"),
+];
+
 module.exports = {
   signup,
   verifyOtp,
@@ -122,4 +141,5 @@ module.exports = {
   forgotPassword,
   resetPassword,
   resendOtp,
+  changePassword,
 };

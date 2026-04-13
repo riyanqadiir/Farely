@@ -15,4 +15,6 @@ export const authApi = {
   forgotPassword: (body) => farelyApi.post('/auth/forgot-password', body),
   verifyForgotPasswordOtp: (body) => farelyApi.post('/auth/verify-forgot-password-otp', body),
   resetPassword: (body) => farelyApi.post('/auth/reset-password', body),
+  /** Logged-in only: currentPassword, newPassword, confirmNewPassword */
+  changePassword: (body) => farelyApi.post('/auth/change-password', body),
 };

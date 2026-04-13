@@ -518,6 +518,58 @@ async function resetPassword(req, res, next) {
   }
 }
 
+/**
+ * POST /auth/change-password (requires Bearer token)
+ * Body: currentPassword, newPassword, confirmNewPassword
+ * For users who already have a password. Not the same as forgot-password → reset-password (OTP flow).
+ */
+async function changePassword(req, res, next) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.userId).select("+password");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+    if (!user.password) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This account has no password (e.g. Google-only). Use Forgot password on the login screen to set a password first.",
+      });
+    }
+
+    const bcrypt = require("bcryptjs");
+    const match = await bcrypt.compare(String(currentPassword), user.password);
+    if (!match) {
+      return res.status(400).json({ success: false, message: "Current password is incorrect." });
+    }
+
+    const sameAsOld = await bcrypt.compare(String(newPassword), user.password);
+    if (sameAsOld) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be different from your current password.",
+      });
+    }
+
+    user.password = newPassword;
+    user.passwordChangedAt = new Date();
+    await user.save();
+
+    const token = signToken({ user: { id: user._id.toString(), role: user.role } });
+    const u = user.toJSON ? user.toJSON() : user;
+    delete u.password;
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully.",
+      token,
+      user: u,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   signup,
   resendOtp,
@@ -528,4 +580,5 @@ module.exports = {
   forgotPassword,
   verifyForgotPasswordOtp,
   resetPassword,
+  changePassword,
 };

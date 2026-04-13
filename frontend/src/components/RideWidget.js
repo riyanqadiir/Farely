@@ -1,7 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { useRideWidget } from '../context/RideWidgetContext';
 import { pushAppNotification } from '../utils/notifications';
+import { openPhoneDialer } from '../utils/phoneDialer';
 
 function formatTime(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -46,8 +48,12 @@ const RideWidget = ({ navigationRef }) => {
         driverPhone: activeRide.driverPhone,
         numberPlate: activeRide.numberPlate,
         rideId: activeRide.rideId || activeRide.id,
+        paymentMethod: activeRide.paymentMethod || 'cash',
+        paymentMethodId: activeRide.paymentMethodId || null,
       },
       rideId: activeRide.rideId || activeRide.id,
+      selectedPaymentMethod: activeRide.paymentMethod || 'cash',
+      selectedPaymentMethodId: activeRide.paymentMethodId || null,
     });
   };
 
@@ -61,6 +67,25 @@ const RideWidget = ({ navigationRef }) => {
     clearRideWidget();
     const nav = navigationRef?.current;
     if (nav) nav.navigate('Main', { screen: 'Rides' });
+  };
+
+  const handleCallDriver = async () => {
+    const phone = activeRide.driverPhone;
+    if (!phone) {
+      Alert.alert('No phone number', 'Driver phone number is not available.');
+      return;
+    }
+    const result = await openPhoneDialer(phone);
+    if (!result.ok) {
+      Alert.alert('Cannot call', 'Unable to open the Phone app with this number.');
+      return;
+    }
+    pushAppNotification({
+      type: 'driver',
+      title: 'Call started',
+      body: `Calling ${activeRide.driverName || 'driver'}.`,
+      meta: { driverPhone: phone },
+    });
   };
 
   const handleOpenBookedScreen = () => {
@@ -92,23 +117,34 @@ const RideWidget = ({ navigationRef }) => {
 
   return (
     <View pointerEvents="box-none" style={styles.wrap}>
-      <TouchableOpacity activeOpacity={0.92} style={styles.card} onPress={handleOpenBookedScreen}>
-        <View style={styles.topRow}>
-          <Text style={styles.title}>Ride in progress</Text>
-          <Text style={styles.timer}>{formatTime(remaining)}</Text>
-        </View>
-        <Text style={styles.subtitle} numberOfLines={1}>
-          {activeRide.provider || 'Farely'} • {activeRide.driverName || 'Driver'}
-        </Text>
+      <View style={styles.card}>
+        <TouchableOpacity activeOpacity={0.92} onPress={handleOpenBookedScreen}>
+          <View style={styles.topRow}>
+            <Text style={styles.title}>Ride in progress</Text>
+            <Text style={styles.timer}>{formatTime(remaining)}</Text>
+          </View>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {activeRide.provider || 'Farely'} • {activeRide.driverName || 'Driver'}
+          </Text>
+        </TouchableOpacity>
         <View style={styles.actionsRow}>
           <TouchableOpacity style={styles.payBtn} onPress={handlePay}>
             <Text style={styles.payBtnText}>Pay</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.callBtn, !activeRide.driverPhone && styles.callBtnDisabled]}
+            onPress={handleCallDriver}
+            disabled={!activeRide.driverPhone}
+            accessibilityRole="button"
+            accessibilityLabel="Call driver"
+          >
+            <FontAwesome6 name="phone" size={14} color="#fff" solid />
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
             <Text style={styles.cancelBtnText}>Cancel ride</Text>
           </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -137,9 +173,17 @@ const styles = StyleSheet.create({
   title: { color: '#fff', fontWeight: '900' },
   timer: { color: '#86efac', fontWeight: '900' },
   subtitle: { marginTop: 6, color: '#cbd5e1', fontWeight: '700', fontSize: 12 },
-  actionsRow: { marginTop: 10, flexDirection: 'row', gap: 8 },
+  actionsRow: { marginTop: 10, flexDirection: 'row', gap: 8, alignItems: 'stretch' },
   payBtn: { flex: 1, backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   payBtnText: { color: '#fff', fontWeight: '900' },
+  callBtn: {
+    width: 44,
+    backgroundColor: '#0d9488',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callBtnDisabled: { opacity: 0.45 },
   cancelBtn: { flex: 1, backgroundColor: '#dc2626', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   cancelBtnText: { color: '#fff', fontWeight: '900' },
 });
