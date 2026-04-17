@@ -52,7 +52,14 @@ async function getProfile(req, res, next) {
  */
 async function updateProfile(req, res, next) {
   try {
-    const allowed = ["fullName", "phone", "email", "countryCode", "street", "city", "district"];
+    if (req.body.phone !== undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number cannot be changed from profile.",
+      });
+    }
+
+    const allowed = ["fullName", "email", "countryCode", "street", "city", "district"];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];

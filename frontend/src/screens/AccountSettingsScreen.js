@@ -39,15 +39,8 @@ const AccountSettingsScreen = ({ navigation }) => {
           <Row
             icon="user"
             label="Profile"
-            subtitle="Name, photo, address"
-            onPress={() => navigation.navigate('Main', { screen: 'Profile', params: { fromMenu: true } })}
-          />
-          <View style={styles.divider} />
-          <Row
-            icon="envelope"
-            label="Email & phone"
             subtitle={`${email} · ${phone}`}
-            onPress={() => navigation.navigate('Main', { screen: 'Profile', params: { fromMenu: true } })}
+            onPress={() => navigation.navigate('MenuProfile')}
           />
         </View>
 

@@ -35,6 +35,10 @@ const RideOptionsScreen = ({ navigation, route }) => {
   const [selectedCardId, setSelectedCardId] = useState(null);
   const [cards, setCards] = useState([]);
   const { startRideWidget } = useRideWidget();
+  const selectedCard = useMemo(
+    () => cards.find((c) => c.id === selectedCardId) || null,
+    [cards, selectedCardId]
+  );
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -120,7 +124,7 @@ const RideOptionsScreen = ({ navigation, route }) => {
         paymentMethodId: selectedMethod === 'card' ? selectedCardId : null,
         paymentMethodLabel:
           selectedMethod === 'card'
-            ? `Card ${cards.find((c) => c.id === selectedCardId)?.last4 || ''}`.trim()
+            ? selectedCard?.label || 'Card'
             : selectedMethod === 'wallet'
               ? 'Wallet'
               : 'Cash',
@@ -222,7 +226,7 @@ const RideOptionsScreen = ({ navigation, route }) => {
                     onPress={() => setSelectedCardId(card.id)}
                   >
                     <Text style={styles.cardPickText}>
-                      {card.brand?.toUpperCase()} •••• {card.last4}
+                      {card.label || `${card.brand?.toUpperCase() || 'CARD'} card`}
                     </Text>
                   </TouchableOpacity>
                 ))}

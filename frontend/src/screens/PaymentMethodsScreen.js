@@ -9,6 +9,8 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Platform,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
@@ -31,6 +33,7 @@ const PaymentMethodsScreen = ({ navigation }) => {
   const [label, setLabel] = useState('');
   const [cardComplete, setCardComplete] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const load = useCallback(async (opts = { showSpinner: true }) => {
     if (opts.showSpinner) setLoading(true);
@@ -105,6 +108,23 @@ const PaymentMethodsScreen = ({ navigation }) => {
     }
   };
 
+  React.useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const onShow = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e?.endCoordinates?.height || 0);
+    });
+    const onHide = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, []);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
@@ -163,41 +183,50 @@ const PaymentMethodsScreen = ({ navigation }) => {
 
       <Modal visible={modalOpen} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { marginBottom: keyboardHeight > 0 ? 8 : 0 }]}>
             <Text style={styles.modalTitle}>Add card</Text>
             <Text style={styles.modalHint}>Enter card details (test mode supported).</Text>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={[
+                styles.modalBody,
+                { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 12 : 12 },
+              ]}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.fieldLabel}>Label</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Work Visa"
+                value={label}
+                onChangeText={setLabel}
+                returnKeyType="next"
+              />
 
-            <Text style={styles.fieldLabel}>Label</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Work Visa"
-              value={label}
-              onChangeText={setLabel}
-            />
+              <Text style={styles.fieldLabel}>Card details</Text>
+              <CardField
+                postalCodeEnabled={false}
+                placeholders={{ number: '4242 4242 4242 4242' }}
+                cardStyle={{
+                  backgroundColor: '#ffffff',
+                  textColor: '#0f172a',
+                  borderColor: '#e2e8f0',
+                  borderWidth: 1,
+                  borderRadius: 10,
+                }}
+                style={styles.cardField}
+                onCardChange={(details) => setCardComplete(!!details?.complete)}
+              />
 
-            <Text style={styles.fieldLabel}>Card details</Text>
-            <CardField
-              postalCodeEnabled={false}
-              placeholders={{ number: '4242 4242 4242 4242' }}
-              cardStyle={{
-                backgroundColor: '#ffffff',
-                textColor: '#0f172a',
-                borderColor: '#e2e8f0',
-                borderWidth: 1,
-                borderRadius: 10,
-              }}
-              style={styles.cardField}
-              onCardChange={(details) => setCardComplete(!!details?.complete)}
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setModalOpen(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSave} onPress={saveCard} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSaveText}>Save</Text>}
-              </TouchableOpacity>
-            </View>
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalCancel} onPress={() => setModalOpen(false)}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalSave} onPress={saveCard} disabled={saving}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSaveText}>Save</Text>}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -278,7 +307,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 18,
     padding: 20,
     paddingBottom: 28,
+    maxHeight: '90%',
   },
+  modalBody: { paddingBottom: 12 },
   modalTitle: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
   modalHint: { fontSize: 12, color: '#64748b', marginTop: 6, marginBottom: 8 },
   fieldLabel: { fontSize: 11, fontWeight: '800', color: '#64748b', marginTop: 10, marginBottom: 4 },

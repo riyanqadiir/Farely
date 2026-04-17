@@ -7,10 +7,9 @@ const updateProfile = [
     .isLength({ max: 120 })
     .withMessage("Name cannot exceed 120 characters"),
   body("phone")
-    .optional()
-    .trim()
-    .isLength({ min: 10, max: 15 })
-    .withMessage("Phone must be 10–15 digits"),
+    .not()
+    .exists()
+    .withMessage("Phone number cannot be changed from profile."),
   body("email")
     .optional()
     .trim()

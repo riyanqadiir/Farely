@@ -9,6 +9,23 @@ import { useFocusEffect } from '@react-navigation/native';
 
 const WAIT_MS = 5 * 60 * 1000;
 
+function normalizePhoneForWhatsApp(rawPhone) {
+  const value = String(rawPhone || '').trim();
+  if (!value) return '';
+
+  const hasPlus = value.startsWith('+');
+  const digitsOnly = value.replace(/\D/g, '');
+  if (!digitsOnly) return '';
+
+  if (hasPlus) return digitsOnly;
+
+  // Pakistan local mobile formats (03xxxxxxxxx or 3xxxxxxxxx) to E.164 digits.
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('03')) return `92${digitsOnly.slice(1)}`;
+  if (digitsOnly.length === 10 && digitsOnly.startsWith('3')) return `92${digitsOnly}`;
+
+  return digitsOnly;
+}
+
 function formatTime(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(s / 60);
@@ -108,12 +125,21 @@ const ChatScreen = ({ navigation, route }) => {
 
   const handleWhatsApp = async () => {
     if (!driverPhone) return Alert.alert('No WhatsApp number', 'Rider WhatsApp number is missing.');
-    const digits = String(driverPhone).replace(/\D/g, '');
-    const url = `https://wa.me/${digits}`;
+    const digits = normalizePhoneForWhatsApp(driverPhone);
+    if (!digits || digits.length < 10) {
+      return Alert.alert('Invalid WhatsApp number', 'The rider phone number is not valid for WhatsApp.');
+    }
+
+    const appUrl = `whatsapp://send?phone=${digits}`;
+    const webUrl = `https://wa.me/${digits}`;
+
     try {
-      const ok = await Linking.canOpenURL(url);
-      if (!ok) return Alert.alert('Cannot open WhatsApp', 'WhatsApp is not installed or link is invalid.');
-      await Linking.openURL(url);
+      const canUseApp = await Linking.canOpenURL(appUrl);
+      if (canUseApp) {
+        await Linking.openURL(appUrl);
+      } else {
+        await Linking.openURL(webUrl);
+      }
       pushAppNotification({
         type: 'driver',
         title: 'WhatsApp opened',
@@ -121,7 +147,7 @@ const ChatScreen = ({ navigation, route }) => {
         meta: { driverPhone },
       });
     } catch (_) {
-      Alert.alert('Cannot open WhatsApp', 'Failed to open WhatsApp link.');
+      Alert.alert('Cannot open WhatsApp', 'User does not exist on WhatsApp or the number is invalid.');
     }
   };
 

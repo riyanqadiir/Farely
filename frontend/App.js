@@ -138,6 +138,8 @@ const AppNavigator = () => {
               <Stack.Screen name="Notification" component={NotificationScreen} />
               <Stack.Screen name="LocationSearch" component={LocationSearchScreen} />
               <Stack.Screen name="Menu" component={MenuScreen} />
+              <Stack.Screen name="MenuWallet" component={WalletScreen} />
+              <Stack.Screen name="MenuProfile" component={ProfileScreen} />
               <Stack.Screen name="About" component={AboutScreen} />
               <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
               <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />

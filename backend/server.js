@@ -66,6 +66,7 @@ app.use(errorHandler);
 
 // Server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+// Listen on all interfaces so phones / emulators on the LAN can reach the API (not only 127.0.0.1).
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server listening on port ${PORT}`);
 });

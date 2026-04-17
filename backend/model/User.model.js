@@ -18,7 +18,9 @@ const UserSchema = new mongoose.Schema(
     phone: {
       type: String,
       trim: true,
+      unique: true,
       sparse: true,
+      immutable: true,
     },
     countryCode: {
       type: String,

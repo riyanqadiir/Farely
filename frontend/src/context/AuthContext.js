@@ -1,10 +1,10 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { authApi } from '../api/auth';
 
 export const AuthContext = createContext();
+let googleSigninModule = null;
 
 /** @deprecated Legacy single-key flag; prefer per-user keys. */
 const LEGACY_PROFILE_ONBOARDED_KEY = 'profileOnboarded';
@@ -34,20 +34,41 @@ async function readProfileOnboardedFlag(user) {
   return false;
 }
 
+function isExpoGoRuntime() {
+  return Constants.executionEnvironment === 'storeClient';
+}
+
+async function getGoogleSignin() {
+  if (isExpoGoRuntime()) return null;
+  if (googleSigninModule) return googleSigninModule;
+  try {
+    const mod = await import('@react-native-google-signin/google-signin');
+    googleSigninModule = mod.GoogleSignin;
+    return googleSigninModule;
+  } catch (_) {
+    return null;
+  }
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pendingProfileComplete, setPendingProfileCompleteState] = useState(false);
 
   useEffect(() => {
-    const webClientId = Constants.expoConfig?.extra?.googleWebClientId;
-    const iosClientId = Constants.expoConfig?.extra?.googleIosClientId;
-    if (webClientId || iosClientId) {
-      GoogleSignin.configure({
-        webClientId: webClientId || undefined,
-        iosClientId: iosClientId || undefined,
-      });
-    }
+    const configureGoogle = async () => {
+      const GoogleSignin = await getGoogleSignin();
+      if (!GoogleSignin) return;
+      const webClientId = Constants.expoConfig?.extra?.googleWebClientId;
+      const iosClientId = Constants.expoConfig?.extra?.googleIosClientId;
+      if (webClientId || iosClientId) {
+        GoogleSignin.configure({
+          webClientId: webClientId || undefined,
+          iosClientId: iosClientId || undefined,
+        });
+      }
+    };
+    configureGoogle();
     loadUser();
   }, []);
 
@@ -111,6 +132,10 @@ export const AuthProvider = ({ children }) => {
 
   const googleSignIn = async () => {
     try {
+      const GoogleSignin = await getGoogleSignin();
+      if (!GoogleSignin) {
+        return { success: false, msg: 'Google Sign-In is unavailable in Expo Go. Use a development build.' };
+      }
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       const signInResult = await GoogleSignin.signIn();
       if (signInResult?.type !== 'success' || !signInResult.data?.idToken) {
@@ -138,7 +163,8 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await GoogleSignin.signOut();
+      const GoogleSignin = await getGoogleSignin();
+      if (GoogleSignin) await GoogleSignin.signOut();
     } catch (_) {}
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('pendingProfileComplete');

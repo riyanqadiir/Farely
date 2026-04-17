@@ -62,7 +62,7 @@ const MenuScreen = () => {
               icon="user"
               label="Profile"
               subtitle="Name, photo, city & address"
-              onPress={() => goTo('Main', { screen: 'Profile', params: { fromMenu: true } })}
+              onPress={() => goTo('MenuProfile')}
             />
             <View style={styles.divider} />
             <MenuRow
@@ -80,7 +80,7 @@ const MenuScreen = () => {
               icon="wallet"
               label="Wallet"
               subtitle="Balance, top-up, trip history"
-              onPress={() => goTo('Main', { screen: 'Wallet', params: { fromMenu: true } })}
+              onPress={() => goTo('MenuWallet')}
             />
             <View style={styles.divider} />
             <MenuRow

@@ -42,15 +42,57 @@ async function resolvePaymentMethod({ brand, stripePaymentMethodId }) {
   return TEST_METHOD_BY_BRAND[normalized] || TEST_METHOD_BY_BRAND.visa;
 }
 
+/**
+ * Saved cards must be attached to a Stripe Customer before they can be charged more than once.
+ * PaymentMethods used in a confirmed PaymentIntent without `customer` cannot be reused until attached.
+ */
+async function ensurePaymentMethodAttachedToCustomer(user, paymentMethodId) {
+  if (!stripe) return null;
+
+  const customerId = await getOrCreateStripeCustomer(user);
+  const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+
+  if (pm.customer === customerId) {
+    return customerId;
+  }
+  if (pm.customer) {
+    const e = new Error("This card is linked to another billing account. Remove it and add a new card.");
+    e.statusCode = 400;
+    throw e;
+  }
+
+  try {
+    await stripe.paymentMethods.attach(paymentMethodId, { customer: customerId });
+  } catch (err) {
+    const refreshed = await stripe.paymentMethods.retrieve(paymentMethodId).catch(() => null);
+    if (refreshed?.customer === customerId) {
+      return customerId;
+    }
+    const raw = err?.message || "";
+    const e = new Error(
+      /previously used|may not be used again|unexpected_state|resource_already_exists/i.test(raw)
+        ? "This card can no longer be charged. Remove it in Payment methods and add the card again."
+        : raw || "Could not use this card."
+    );
+    e.statusCode = 400;
+    throw e;
+  }
+
+  return customerId;
+}
+
 async function chargePaymentMethod({ user, amountPkr, paymentMethodId, metadata = {}, description = "Farely payment" }) {
   if (!stripe) {
     return buildMockResult("pi_mock");
   }
 
+  const customerId = await ensurePaymentMethodAttachedToCustomer(user, paymentMethodId);
+
   const amountInMinor = Math.round(Number(amountPkr) * 100);
   const intent = await stripe.paymentIntents.create({
     amount: amountInMinor,
     currency: "pkr",
+    customer: customerId,
     payment_method: paymentMethodId,
     confirm: true,
     description,
@@ -66,6 +108,7 @@ async function attachPaymentMethodToCustomer({ user, paymentMethodId }) {
     return { id: paymentMethodId, brand: "visa", last4: "4242", exp_month: 12, exp_year: 2030 };
   }
 
+  await ensurePaymentMethodAttachedToCustomer(user, paymentMethodId);
   const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
   return pm.card
     ? {

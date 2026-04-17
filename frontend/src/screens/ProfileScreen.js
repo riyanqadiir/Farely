@@ -9,6 +9,8 @@ import {
   ScrollView,
   Image,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 let ImagePicker = null;
 try {
@@ -21,6 +23,7 @@ import { pushAppNotification } from '../utils/notifications';
 
 const ProfileScreen = ({ navigation, route }) => {
   const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [street, setStreet] = useState('');
   const [city, setCity] = useState('');
@@ -31,11 +34,12 @@ const ProfileScreen = ({ navigation, route }) => {
   const { user, loadUser } = useContext(AuthContext);
 
   const profilePhotoUrl = user?.profilePhotoUrl || photoUri;
-  const openedFromMenu = !!route?.params?.fromMenu;
+  const openedFromMenu = route?.name === 'MenuProfile';
 
   useEffect(() => {
     if (user) {
       setFullName(user.fullName || '');
+      setPhone(user.phone || '');
       setEmail(user.email || '');
       setStreet(user.street || '');
       setCity(user.city || '');
@@ -123,17 +127,26 @@ const ProfileScreen = ({ navigation, route }) => {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-      {openedFromMenu && (
-        <View style={styles.inlineHeader}>
-          <TouchableOpacity onPress={() => navigation.navigate('Menu')} style={styles.inlineBackBtn}>
-            <Text style={styles.inlineBackText}>Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.inlineHeaderTitle}>Profile settings</Text>
-          <View style={{ width: 64 }} />
-        </View>
-      )}
-      <Text style={styles.title}>Edit Profile</Text>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}
+    >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {openedFromMenu && (
+          <View style={styles.inlineHeader}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.inlineBackBtn}>
+              <Text style={styles.inlineBackText}>Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.inlineHeaderTitle}>Profile settings</Text>
+            <View style={{ width: 64 }} />
+          </View>
+        )}
+        <Text style={styles.title}>Edit Profile</Text>
 
       <TouchableOpacity
         style={styles.avatarContainer}
@@ -166,6 +179,14 @@ const ProfileScreen = ({ navigation, route }) => {
         autoCapitalize="none"
       />
       <TextInput
+        style={[styles.input, styles.inputDisabled]}
+        placeholder="Phone Number"
+        value={phone}
+        keyboardType="phone-pad"
+        editable={false}
+        selectTextOnFocus={false}
+      />
+      <TextInput
         style={styles.input}
         placeholder="Street"
         value={street}
@@ -184,24 +205,25 @@ const ProfileScreen = ({ navigation, route }) => {
         onChangeText={setDistrict}
       />
 
-      <TouchableOpacity
-        style={styles.saveButton}
-        onPress={handleSave}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.saveButtonText}>Save</Text>
-        )}
-      </TouchableOpacity>
-    </ScrollView>
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={handleSave}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.saveButtonText}>Save</Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  scrollContent: { padding: spacing.xl },
+  scrollContent: { padding: spacing.xl, paddingBottom: spacing.xxl },
   inlineHeader: {
     marginTop: 10,
     marginBottom: spacing.lg,
@@ -245,6 +267,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: spacing.md,
     fontSize: 16,
+  },
+  inputDisabled: {
+    backgroundColor: '#f8fafc',
+    color: '#64748b',
   },
   saveButton: {
     backgroundColor: colors.primary,
