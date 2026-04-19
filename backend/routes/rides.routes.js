@@ -11,6 +11,7 @@ router.post("/compare", ridesController.compare);
 
 // POST /rides/estimate-min — minimum base fare for coords + ride type (no bookings)
 router.post("/estimate-min", ridesController.estimateMin);
+router.post("/provider-selection", ridesController.logProviderSelection);
 
 module.exports = router;
 

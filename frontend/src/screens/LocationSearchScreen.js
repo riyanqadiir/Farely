@@ -39,6 +39,7 @@ const LocationSearchScreen = ({ navigation, route }) => {
   const initialDestinationCoords = route?.params?.destinationCoords ?? null;
   const currentLocation = route?.params?.currentLocation ?? null;
   const rideType = route?.params?.rideType ?? 'car';
+  const carAc = Boolean(route?.params?.carAc);
 
   const [fromPlace, setFromPlace] = useState({
     label: initialPickup,
@@ -144,6 +145,7 @@ const LocationSearchScreen = ({ navigation, route }) => {
           destinationLat: to.latitude,
           destinationLng: to.longitude,
           rideType,
+          carAc: rideType === 'car' ? carAc : false,
         });
         if (reqId !== estimateReqId.current) return;
         setMinEstimate(res.data || null);
@@ -159,7 +161,7 @@ const LocationSearchScreen = ({ navigation, route }) => {
     return () => {
       clearTimeout(timer);
     };
-  }, [fromPlace.coords, toPlace.coords, rideType]);
+  }, [fromPlace.coords, toPlace.coords, rideType, carAc]);
 
   const canConfirm = !!fromPlace.label && !!toPlace.label && !!fromPlace.coords && !!toPlace.coords;
 
@@ -366,7 +368,9 @@ const LocationSearchScreen = ({ navigation, route }) => {
                     {typeof minEstimate.distanceKm === 'number' ? ` · ${minEstimate.distanceKm} km` : ''}
                   </Text>
                   <Text style={styles.minFareHint}>
-                    For selected ride type ({rideType}). Provider fares are this or higher.
+                    For selected ride type (
+                    {rideType === 'car' ? `${rideType}${carAc ? ', with AC' : ', no AC'}` : rideType}
+                    ). Provider fares are this or higher.
                   </Text>
                 </>
               ) : (

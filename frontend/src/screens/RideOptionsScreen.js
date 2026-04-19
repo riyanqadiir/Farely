@@ -14,8 +14,50 @@ import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import farelyApi from '../api/farelyApi';
 import { getProviderLogo } from '../constants/brandAssets';
 import { pushAppNotification } from '../utils/notifications';
-import { useRideWidget } from '../context/RideWidgetContext';
-import { fetchPaymentMethods } from '../api/paymentMethods';
+import { redirectToProvider } from '../utils/providerRedirect';
+
+/** After a successful deep link, show pickup/drop digits for every known provider (same UX). */
+const MANUAL_COORDS_ALERT_TITLE_BY_PROVIDER = {
+  Yango: 'Yango opened',
+  inDrive: 'inDrive opened',
+  Careem: 'Careem opened',
+  Bykea: 'Bykea opened',
+};
+
+function RideOptionCard({ item, bookingLoadingId, onOpenApp }) {
+  const isBooking = bookingLoadingId === item.id;
+  const logo = getProviderLogo(item.provider);
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardLeft}>
+        <View style={styles.providerRow}>
+          {!!logo && <Image source={logo} style={styles.providerLogo} resizeMode="contain" />}
+          <Text style={styles.provider}>{item.provider}</Text>
+        </View>
+        <Text style={styles.ride}>
+          {(item.name || item.rideType)} • {item.eta} •{' '}
+          {typeof item.distanceKm === 'number' ? `${item.distanceKm} km` : '—'}
+        </Text>
+        <Text style={styles.riderMeta}>Estimate confidence: {Math.round((item.estimateConfidence || 0) * 100)}%</Text>
+      </View>
+
+      <View style={styles.cardRight}>
+        <Text style={styles.price}>PKR {Math.round(item.fare)}</Text>
+        <TouchableOpacity
+          style={[styles.bookBtn, isBooking ? styles.bookBtnDisabled : null]}
+          onPress={() => onOpenApp(item)}
+          disabled={!!bookingLoadingId}
+        >
+          {isBooking ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.bookBtnText}>Open app</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
 
 const RideOptionsScreen = ({ navigation, route }) => {
   const pickup = route?.params?.pickup ?? '';
@@ -25,16 +67,17 @@ const RideOptionsScreen = ({ navigation, route }) => {
   const incomingFares = route?.params?.fares ?? [];
   const routeBaseFare = route?.params?.baseFare;
   const routeDistanceKm = route?.params?.distanceKm;
+  const searchLogId = route?.params?.searchLogId;
+  const pickupCoords = route?.params?.pickupCoords;
+  const destinationCoords = route?.params?.destinationCoords;
+  const initialCarAc = Boolean(route?.params?.carAc);
 
   const [rideType] = useState(initialRideType);
+  const [carAc] = useState(initialCarAc);
   const [sortBy, setSortBy] = useState(initialSortBy);
   const [fares, setFares] = useState(incomingFares);
   const [bookingLoadingId, setBookingLoadingId] = useState(null);
   const [bookingStatus, setBookingStatus] = useState('');
-  const [selectedMethod, setSelectedMethod] = useState('cash');
-  const [selectedCardId, setSelectedCardId] = useState(null);
-  const [cards, setCards] = useState([]);
-  const { startRideWidget } = useRideWidget();
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -48,27 +91,21 @@ const RideOptionsScreen = ({ navigation, route }) => {
     setFares(incomingFares);
   }, [incomingFares]);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const list = await fetchPaymentMethods();
-        if (!mounted) return;
-        setCards(list);
-        const defaultCard = list.find((c) => c.isDefault) || list[0] || null;
-        setSelectedCardId(defaultCard?.id || null);
-      } catch (_) {}
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   const sortedFares = useMemo(() => {
     const list = Array.isArray(fares) ? [...fares] : [];
     if (sortBy === 'fare') return list.sort((a, b) => (a?.fare ?? 0) - (b?.fare ?? 0));
     return list.sort((a, b) => parseInt(a?.eta ?? '0', 10) - parseInt(b?.eta ?? '0', 10));
   }, [fares, sortBy]);
+
+  const rideHandoff = useMemo(
+    () => ({ rideType, carAc: rideType === 'car' ? carAc : false }),
+    [rideType, carAc]
+  );
+
+  const rideTypeSummary =
+    rideType === 'car'
+      ? `car (${carAc ? 'with AC' : 'no AC'})`
+      : rideType;
 
   const toggleSort = () => setSortBy((v) => (v === 'fare' ? 'eta' : 'fare'));
 
@@ -84,66 +121,65 @@ const RideOptionsScreen = ({ navigation, route }) => {
     goToRideHome();
   };
 
+  const logSelection = async (payload) => {
+    try {
+      await farelyApi.post('/rides/provider-selection', payload);
+    } catch (_) {}
+  };
+
   const handleBook = async (rideOption) => {
     const id = rideOption?.id;
     if (!id || bookingLoadingId) return;
-    if (selectedMethod === 'card' && !selectedCardId) {
-      Alert.alert('Card required', 'Please add/select a card before booking with card.');
-      return;
-    }
 
     setBookingLoadingId(id);
-    setBookingStatus('Assigning driver...');
+    setBookingStatus('Opening provider app...');
     try {
-      const res = await farelyApi.post('/rides/compare', {
-        rideId: id,
-        action: 'book',
-        paymentMethod: selectedMethod,
-        paymentMethodId: selectedMethod === 'card' ? selectedCardId : null,
+      const redirect = await redirectToProvider(
+        rideOption.provider,
+        pickupCoords,
+        destinationCoords,
+        rideHandoff
+      );
+
+      await logSelection({
+        searchLogId,
+        provider: rideOption.provider,
+        rideType,
+        carAc: rideType === 'car' ? carAc : false,
+        estimatedFare: rideOption.fare,
+        redirectAttempted: true,
+        redirectSucceeded: redirect.success,
+        redirectMode: redirect.mode,
+        failureReason: redirect.reason || '',
       });
-      const { driver, driverLocation, status } = res.data || {};
 
       if (!mountedRef.current) return;
-
-      setBookingStatus(status || 'Driver Assigned');
-      startRideWidget({
-        id: id,
-        rideId: id,
-        provider: rideOption?.provider || '',
-        driverName: driver?.name || rideOption?.rider?.name || 'Driver',
-        driverPhone: driver?.phone || rideOption?.rider?.phone || '',
-        numberPlate: driver?.numberPlate || rideOption?.rider?.numberPlate || '',
-        pickup,
-        destination,
-        fare: typeof rideOption?.fare === 'number' ? rideOption.fare : null,
-        paymentMethod: selectedMethod,
-        paymentMethodId: selectedMethod === 'card' ? selectedCardId : null,
-        paymentMethodLabel:
-          selectedMethod === 'card'
-            ? `Card ${cards.find((c) => c.id === selectedCardId)?.last4 || ''}`.trim()
-            : selectedMethod === 'wallet'
-              ? 'Wallet'
-              : 'Cash',
-        expiresAt: Date.now() + 5 * 60 * 1000,
-      });
       pushAppNotification({
         type: 'ride',
-        title: 'Driver assigned',
-        body: `${driver?.name || 'Your driver'} accepted your ride on ${rideOption?.provider || 'Farely'}.`,
+        title: 'Redirected to provider',
+        body: `Continue your booking in ${rideOption?.provider || 'provider app'}.`,
         meta: { rideId: rideOption?.id || null, provider: rideOption?.provider || '' },
       });
-
-      navigation.navigate('Chat', {
-        booking: { driver, driverLocation, status: status || 'Driver Assigned' },
-        rideOption,
-        pickup,
-        destination,
-        selectedPaymentMethod: selectedMethod,
-        selectedPaymentMethodId: selectedMethod === 'card' ? selectedCardId : null,
-      });
+      setBookingStatus(redirect.success ? 'Opened provider app' : 'Could not open provider app');
+      if (redirect.success && pickupCoords && destinationCoords) {
+        const manual =
+          `If locations did not prefill, enter manually:\n\n`
+          + `Pickup: ${pickupCoords.latitude.toFixed(6)}, ${pickupCoords.longitude.toFixed(6)}\n`
+          + `Dropoff: ${destinationCoords.latitude.toFixed(6)}, ${destinationCoords.longitude.toFixed(6)}`;
+        const manualTitle = MANUAL_COORDS_ALERT_TITLE_BY_PROVIDER[rideOption.provider];
+        if (manualTitle) {
+          Alert.alert(manualTitle, manual);
+        }
+      }
+      if (!redirect.success) {
+        Alert.alert(
+          'Could not open app',
+          'We could not launch the provider app. Please install it or try again.'
+        );
+      }
     } catch (err) {
-      const msg = err.response?.data?.msg || err.response?.data?.message || 'Booking failed';
-      Alert.alert('Booking failed', msg);
+      const msg = err.response?.data?.msg || err.response?.data?.message || 'Redirect failed';
+      Alert.alert('Redirect failed', msg);
     } finally {
       if (mountedRef.current) setBookingLoadingId(null);
     }
@@ -173,7 +209,10 @@ const RideOptionsScreen = ({ navigation, route }) => {
               </Text>
               {!!bookingStatus && <Text style={styles.bookingStatus}>{bookingStatus}</Text>}
               <Text style={styles.meta}>
-                Type: {rideType} • Sort: {sortBy}
+                Type: {rideTypeSummary} • Sort: {sortBy}
+              </Text>
+              <Text style={styles.meta}>
+                Farely shows estimates. Final fare is confirmed in provider app.
               </Text>
               {typeof routeBaseFare === 'number' && Number.isFinite(routeBaseFare) && (
                 <View style={styles.baseFareBanner}>
@@ -199,36 +238,8 @@ const RideOptionsScreen = ({ navigation, route }) => {
             </View>
           </View>
           <View style={styles.paymentChoiceCard}>
-            <Text style={styles.paymentChoiceTitle}>Pay for this ride with</Text>
-            <View style={styles.paymentChoices}>
-              {['cash', 'card', 'wallet'].map((m) => (
-                <TouchableOpacity
-                  key={m}
-                  style={[styles.paymentChip, selectedMethod === m ? styles.paymentChipOn : null]}
-                  onPress={() => setSelectedMethod(m)}
-                >
-                  <Text style={[styles.paymentChipText, selectedMethod === m ? styles.paymentChipTextOn : null]}>
-                    {m.toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {selectedMethod === 'card' && (
-              <View style={styles.cardPickRow}>
-                {cards.map((card) => (
-                  <TouchableOpacity
-                    key={card.id}
-                    style={[styles.cardPick, selectedCardId === card.id ? styles.cardPickOn : null]}
-                    onPress={() => setSelectedCardId(card.id)}
-                  >
-                    <Text style={styles.cardPickText}>
-                      {card.brand?.toUpperCase()} •••• {card.last4}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-                {!cards.length && <Text style={styles.noCardText}>No card saved. Add from Payment Methods.</Text>}
-              </View>
-            )}
+            <Text style={styles.paymentChoiceTitle}>Aggregator mode</Text>
+            <Text style={styles.meta}>Booking and payment are completed inside the provider app.</Text>
           </View>
         </View>
 
@@ -242,44 +253,13 @@ const RideOptionsScreen = ({ navigation, route }) => {
               <Text style={styles.emptyText}>Go back and try a different pickup/destination.</Text>
             </View>
           }
-          renderItem={({ item }) => {
-            const isBooking = bookingLoadingId === item.id;
-            const logo = getProviderLogo(item.provider);
-            return (
-              <View style={styles.card}>
-                <View style={styles.cardLeft}>
-                  <View style={styles.providerRow}>
-                    {!!logo && <Image source={logo} style={styles.providerLogo} resizeMode="contain" />}
-                    <Text style={styles.provider}>{item.provider}</Text>
-                  </View>
-                  <Text style={styles.ride}>
-                    {(item.name || item.rideType)} • {item.eta} •{' '}
-                    {typeof item.distanceKm === 'number' ? `${item.distanceKm} km` : '—'}
-                  </Text>
-                  {!!item.rider?.name && <Text style={styles.rider}>Rider: {item.rider.name}</Text>}
-                  {!!item.rider?.phone && <Text style={styles.riderMeta}>Phone: {item.rider.phone}</Text>}
-                  {!!item.rider?.numberPlate && (
-                    <Text style={styles.riderMeta}>Car No: {item.rider.numberPlate}</Text>
-                  )}
-                </View>
-
-                <View style={styles.cardRight}>
-                  <Text style={styles.price}>PKR {Math.round(item.fare)}</Text>
-                  <TouchableOpacity
-                    style={[styles.bookBtn, isBooking ? styles.bookBtnDisabled : null]}
-                    onPress={() => handleBook(item)}
-                    disabled={!!bookingLoadingId}
-                  >
-                    {isBooking ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text style={styles.bookBtnText}>Book</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          }}
+          renderItem={({ item }) => (
+            <RideOptionCard
+              item={item}
+              bookingLoadingId={bookingLoadingId}
+              onOpenApp={handleBook}
+            />
+          )}
         />
       </View>
     </SafeAreaView>

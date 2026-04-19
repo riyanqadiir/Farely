@@ -32,6 +32,8 @@ const RIDE_TYPE_ICON_SIZE = 22;
 
 const HomeScreen = ({ navigation, route }) => {
   const [rideType, setRideType] = useState('car'); // rickshaw | bike | car
+  /** When rideType is car: false = without AC, true = with AC (sent to compare + provider intents). */
+  const [carWithAc, setCarWithAc] = useState(false);
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
   const [pickupCoords, setPickupCoords] = useState(null);
@@ -159,17 +161,8 @@ const HomeScreen = ({ navigation, route }) => {
     navigation.setParams({ locationSelection: undefined });
   }, [navigation, route?.params?.locationSelection]);
 
-  // When ride type changes, recompute minimum fare for the same route (same coords, new pricing tier).
-  const prevRideTypeRef = useRef(rideType);
+  // Recompute minimum fare when ride type, car AC option, or endpoints change.
   useEffect(() => {
-    const rideTypeChanged = prevRideTypeRef.current !== rideType;
-    if (rideTypeChanged) {
-      prevRideTypeRef.current = rideType;
-    }
-    if (!rideTypeChanged) {
-      return;
-    }
-
     const hasEndpoints =
       pickupCoords
       && destinationCoords
@@ -193,6 +186,7 @@ const HomeScreen = ({ navigation, route }) => {
           destinationLat: destinationCoords.latitude,
           destinationLng: destinationCoords.longitude,
           rideType,
+          carAc: rideType === 'car' ? carWithAc : false,
         });
         if (cancelled) return;
         const d = res.data || {};
@@ -213,7 +207,7 @@ const HomeScreen = ({ navigation, route }) => {
     return () => {
       cancelled = true;
     };
-  }, [rideType, pickupCoords, destinationCoords]);
+  }, [rideType, carWithAc, pickupCoords, destinationCoords]);
 
   useEffect(() => {
     const hasEndpoints =
@@ -417,7 +411,7 @@ const HomeScreen = ({ navigation, route }) => {
     setLoading(true);
     setBookingStatus('');
     try {
-      const payload = { pickup, destination, rideType };
+      const payload = { pickup, destination, rideType, carAc: rideType === 'car' ? carWithAc : false };
       payload.pickupLat = pickupCoords.latitude;
       payload.pickupLng = pickupCoords.longitude;
       payload.destinationLat = destinationCoords.latitude;
@@ -448,9 +442,13 @@ const HomeScreen = ({ navigation, route }) => {
         pickup,
         destination,
         rideType,
+        carAc: rideType === 'car' ? carWithAc : false,
         fares: list,
         baseFare: typeof baseFare === 'number' ? baseFare : undefined,
         distanceKm: typeof distKm === 'number' ? distKm : undefined,
+        searchLogId: Array.isArray(raw) ? undefined : raw?.searchLogId,
+        pickupCoords,
+        destinationCoords,
       });
     } catch (err) {
       alert('Failed to get ride options');
@@ -704,6 +702,7 @@ const HomeScreen = ({ navigation, route }) => {
                     destinationCoords,
                     currentLocation,
                     rideType,
+                    carAc: rideType === 'car' ? carWithAc : false,
                   })
                 }
                 activeOpacity={0.85}
@@ -726,7 +725,10 @@ const HomeScreen = ({ navigation, route }) => {
                       accessibilityLabel={t.a11y}
                       accessibilityState={{ selected }}
                       style={[styles.rideTypeChip, selected && styles.rideTypeChipActive]}
-                      onPress={() => setRideType(t.id)}
+                      onPress={() => {
+                        setRideType(t.id);
+                        if (t.id !== 'car') setCarWithAc(false);
+                      }}
                     >
                       {t.kind === 'image' ? (
                         <Image
@@ -743,6 +745,26 @@ const HomeScreen = ({ navigation, route }) => {
                   );
                 })}
               </View>
+              {rideType === 'car' && (
+                <View style={styles.carAcRow}>
+                  <TouchableOpacity
+                    style={[styles.carAcChip, !carWithAc && styles.carAcChipActive]}
+                    onPress={() => setCarWithAc(false)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Car without air conditioning"
+                  >
+                    <Text style={[styles.carAcChipText, !carWithAc && styles.carAcChipTextActive]}>No AC</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.carAcChip, carWithAc && styles.carAcChipActive]}
+                    onPress={() => setCarWithAc(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Car with air conditioning"
+                  >
+                    <Text style={[styles.carAcChipText, carWithAc && styles.carAcChipTextActive]}>With AC</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
       </View>
 
             <Text style={styles.tipText}>Tap on the map to set destination.</Text>
@@ -757,9 +779,9 @@ const HomeScreen = ({ navigation, route }) => {
               </View>
             )}
             <TouchableOpacity style={styles.compareBtn} onPress={handleCompare} disabled={loading}>
-              {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.compareBtnText}>Compare fares</Text>}
+              {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.compareBtnText}>Compare estimates</Text>}
             </TouchableOpacity>
-      <Text style={styles.disclaimer}>* Fares are estimates and may change on the provider's app.</Text>
+      <Text style={styles.disclaimer}>* Farely only provides estimates. Booking and final fare happen in provider apps.</Text>
         </>
 
         {rideOverlayOpen && (
@@ -947,6 +969,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rideTypeChipActive: { backgroundColor: '#111827', borderColor: '#111827' },
+  carAcRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  carAcChip: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  carAcChipActive: { backgroundColor: '#eff6ff', borderColor: '#2563eb' },
+  carAcChipText: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  carAcChipTextActive: { color: '#1d4ed8' },
   inputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   inputFlex: { flex: 1, marginBottom: 0, paddingRight: 44 },
   clearBtn: {

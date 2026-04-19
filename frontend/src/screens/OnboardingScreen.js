@@ -25,7 +25,7 @@ const SLIDES = [
   {
     id: '1',
     headline: 'Anywhere you are',
-    description: 'Compare ride fares and ETAs across Careem, Yango, and inDrive—all in one place.',
+    description: 'Compare ride fares and ETAs across Careem, Yango, inDrive, and Bykea—all in one place.',
     Illustration: Slide1Illustration,
   },
   {

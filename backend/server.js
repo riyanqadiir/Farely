@@ -10,6 +10,8 @@ const profileRoutes = require("./routes/profile.routes");
 const ridesRoutes = require("./routes/rides.routes");
 const walletRoutes = require("./routes/wallet.routes");
 const paymentMethodsRoutes = require("./routes/paymentMethods.routes");
+const adminRoutes = require("./routes/admin.routes");
+const supportRoutes = require("./routes/support.routes");
 const { errorHandler } = require("./middleware/error.middleware");
 const { protect } = require("./middleware/auth.middleware");
 const User = require("./model/User.model");
@@ -60,6 +62,8 @@ app.use("/profile", profileRoutes);
 app.use("/rides", ridesRoutes);
 app.use("/wallet", walletRoutes);
 app.use("/payment-methods", paymentMethodsRoutes);
+app.use("/admin", adminRoutes);
+app.use("/support", supportRoutes);
 
 // Central error handler (must be last)
 app.use(errorHandler);

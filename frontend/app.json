@@ -32,7 +32,18 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.farely.app",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["tel", "telprompt"]
+        "LSApplicationQueriesSchemes": [
+          "tel",
+          "telprompt",
+          "indrive",
+          "indriver",
+          "geo",
+          "yandexyango",
+          "yango",
+          "bykea",
+          "bykeapk",
+          "careem"
+        ]
       }
     },
     "android": {

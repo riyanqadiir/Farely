@@ -32,13 +32,14 @@ import AppSettingsScreen from './src/screens/AppSettingsScreen';
 import HelpSupportScreen from './src/screens/HelpSupportScreen';
 import TermsScreen from './src/screens/TermsScreen';
 import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, Linking, Alert } from 'react-native';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { RideWidgetProvider } from './src/context/RideWidgetContext';
 import RideWidget from './src/components/RideWidget';
 import { navigationRef } from './src/navigation/rootNavigation';
 import { StripeProvider, initStripe } from '@stripe/stripe-react-native';
 import Constants from 'expo-constants';
+import { parseProviderReturnUrl } from './src/utils/providerRedirect';
 
 const TAB_ICON_SIZE = 24;
 
@@ -101,6 +102,36 @@ const AppNavigator = () => {
     AsyncStorage.getItem('onboardingSeen').then((val) => {
       setHasSeenOnboarding(val === 'true');
     });
+  }, []);
+
+  useEffect(() => {
+    const handleUrl = (url) => {
+      const payload = parseProviderReturnUrl(url);
+      if (!payload) return;
+      if (payload.returnedPrice) {
+        Alert.alert(
+          'Provider callback received',
+          `${payload.provider} returned ${payload.returnedCurrency || ''} ${payload.returnedPrice}`.trim()
+        );
+      } else {
+        Alert.alert(
+          'Returned from provider',
+          `${payload.provider || 'Provider'} returned to Farely. Live fare callback may not be supported.`
+        );
+      }
+    };
+
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl(url);
+    }).catch(() => null);
+
+    const sub = Linking.addEventListener('url', (event) => {
+      if (event?.url) handleUrl(event.url);
+    });
+
+    return () => {
+      sub.remove();
+    };
   }, []);
 
   if (loading || hasSeenOnboarding === null) {
