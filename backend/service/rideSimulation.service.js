@@ -27,9 +27,9 @@ const RIDE_TYPE_BASE = {
 };
 
 const PROVIDER_CONFIG = {
+  /** Uber: estimates only until Rider API is enabled (no in-app booking). */
+  Uber: { multiplier: 0.98, baseAdd: 12, etaMultiplier: 1.0, confidence: 0.82 },
   Yango: { multiplier: 0.96, baseAdd: 10, etaMultiplier: 1.0, confidence: 0.8 },
-  inDrive: { multiplier: 0.94, baseAdd: 15, etaMultiplier: 1.1, confidence: 0.72 },
-  Careem: { multiplier: 1.02, baseAdd: 20, etaMultiplier: 0.95, confidence: 0.84 },
   /** Bike-first local player; coefficients slightly below car-first apps for bike-like estimates. */
   Bykea: { multiplier: 0.9, baseAdd: 8, etaMultiplier: 1.05, confidence: 0.68 },
 };
@@ -39,11 +39,8 @@ const PROVIDER_RIDE_LABELS = {
   Yango: {
     bike: 'Moto', rickshaw: 'Rickshaw', car: 'Comfort', car_ac: 'Comfort AC', premium: 'Premier',
   },
-  inDrive: {
-    bike: 'Bike', rickshaw: 'Rickshaw', car: 'Standard', car_ac: 'Comfort', premium: 'Premium',
-  },
-  Careem: {
-    bike: 'Bike', rickshaw: 'Rickshaw', car: 'Go', car_ac: 'Go AC', premium: 'Business',
+  Uber: {
+    bike: 'Moto', rickshaw: 'Rickshaw', car: 'UberX', car_ac: 'Comfort', premium: 'Premier',
   },
   Bykea: {
     bike: 'Bike', rickshaw: 'Rickshaw', car: 'Car', car_ac: 'Car AC', premium: 'Plus',
@@ -51,9 +48,8 @@ const PROVIDER_RIDE_LABELS = {
 };
 
 const PROVIDER_BRAND = {
+  Uber: 'Uber',
   Yango: 'Yango',
-  inDrive: 'inDrive',
-  Careem: 'Careem',
   Bykea: 'Bykea',
 };
 

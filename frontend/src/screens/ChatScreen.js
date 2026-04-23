@@ -21,9 +21,6 @@ const ChatScreen = ({ navigation, route }) => {
   const rideOption = route?.params?.rideOption ?? null;
   const pickup = route?.params?.pickup ?? '';
   const destination = route?.params?.destination ?? '';
-  const selectedPaymentMethod = route?.params?.selectedPaymentMethod || 'cash';
-  const selectedPaymentMethodId = route?.params?.selectedPaymentMethodId || null;
-
   const driver = booking?.driver ?? rideOption?.driver ?? null;
   const driverPhone = driver?.phone || rideOption?.rider?.phone || '';
   const driverName = driver?.name || rideOption?.rider?.name || 'Driver';
@@ -59,12 +56,9 @@ const ChatScreen = ({ navigation, route }) => {
       pickup,
       destination,
       fare,
-      paymentMethod: selectedPaymentMethod,
-      paymentMethodId: selectedPaymentMethodId,
-      paymentMethodLabel: selectedPaymentMethod === 'card' ? 'Card' : selectedPaymentMethod === 'wallet' ? 'Wallet' : 'Cash',
       expiresAt: Date.now() + 5 * 60 * 1000,
     });
-  }, [booking?.rideId, destination, driverName, driverPhone, fare, numberPlate, pickup, provider, rideOption?.id, selectedPaymentMethod, selectedPaymentMethodId, startRideWidget]);
+  }, [booking?.rideId, destination, driverName, driverPhone, fare, numberPlate, pickup, provider, rideOption?.id, startRideWidget]);
 
   useEffect(() => {
     islandAnim.setValue(0);
@@ -125,26 +119,6 @@ const ChatScreen = ({ navigation, route }) => {
     }
   };
 
-  const handlePay = () => {
-    navigation.navigate('Payment', {
-      receipt: {
-        provider,
-        pickup,
-        destination,
-        fare,
-        driverName,
-        driverPhone,
-        numberPlate,
-        rideId: rideOption?.id || booking?.rideId || null,
-        paymentMethod: selectedPaymentMethod,
-        paymentMethodId: selectedPaymentMethodId,
-      },
-      rideId: rideOption?.id || booking?.rideId || null,
-      selectedPaymentMethod,
-      selectedPaymentMethodId,
-    });
-  };
-
   const goToRideScreen = useCallback(() => {
     navigation.navigate('Main', { screen: 'Rides' });
   }, [navigation]);
@@ -179,9 +153,7 @@ const ChatScreen = ({ navigation, route }) => {
               {numberPlate ? ` • ${numberPlate}` : ''}
             </Text>
           </View>
-          <TouchableOpacity onPress={handlePay} style={styles.payPill}>
-            <Text style={styles.payPillText}>Pay</Text>
-          </TouchableOpacity>
+          <View style={{ width: 56 }} />
         </View>
 
         <View style={styles.mainBody}>

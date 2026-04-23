@@ -1,15 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
-  StyleSheet,
   ActivityIndicator,
   Image,
   FlatList,
-  Modal,
   Linking,
-  Alert,
   Platform,
   Animated,
   PanResponder,
@@ -20,6 +17,9 @@ import * as Location from 'expo-location';
 import farelyApi from '../api/farelyApi';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { pushAppNotification } from '../utils/notifications';
+import { useTheme } from '../theme/ThemeContext';
+import { createHomeStyles } from './homeThemeStyles';
+import { showAppToast } from '../utils/appToast';
 
 const TUK_TUK_PNG = require('../../assets/images/ride-types/tuktuk.png');
 
@@ -31,6 +31,9 @@ const RIDE_TYPE_OPTIONS = [
 const RIDE_TYPE_ICON_SIZE = 22;
 
 const HomeScreen = ({ navigation, route }) => {
+  const { colors: themeColors } = useTheme();
+  const styles = useMemo(() => createHomeStyles(themeColors), [themeColors]);
+
   const [rideType, setRideType] = useState('car'); // rickshaw | bike | car
   /** When rideType is car: false = without AC, true = with AC (sent to compare + provider intents). */
   const [carWithAc, setCarWithAc] = useState(false);
@@ -69,6 +72,8 @@ const HomeScreen = ({ navigation, route }) => {
   const SHEET_EXPANDED = Math.floor(screenHeight * 0.16);
   const SHEET_COLLAPSED = Math.floor(screenHeight * 0.42);
   const sheetTranslateY = useRef(new Animated.Value(SHEET_COLLAPSED)).current;
+  const locationBannerY = useRef(new Animated.Value(-22)).current;
+  const locationBannerOpacity = useRef(new Animated.Value(0)).current;
 
   const animateSheetTo = (toValue) => {
     Animated.spring(sheetTranslateY, {
@@ -88,6 +93,37 @@ const HomeScreen = ({ navigation, route }) => {
     setDriverCoords(null);
     setBookingStatus('');
   };
+
+  useEffect(() => {
+    if (showLocationPrompt) {
+      Animated.parallel([
+        Animated.timing(locationBannerOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.spring(locationBannerY, {
+          toValue: 0,
+          useNativeDriver: true,
+          damping: 15,
+          stiffness: 180,
+        }),
+      ]).start();
+      return;
+    }
+    Animated.parallel([
+      Animated.timing(locationBannerOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(locationBannerY, {
+        toValue: -22,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [showLocationPrompt, locationBannerOpacity, locationBannerY]);
 
   useEffect(() => () => resetBookingSimulation(), []);
 
@@ -280,7 +316,11 @@ const HomeScreen = ({ navigation, route }) => {
       }
       await Linking.openSettings();
     } catch (_) {
-      Alert.alert('Open settings', 'Please open device settings and enable location.');
+      showAppToast({
+        title: 'Open settings',
+        body: 'Please open device settings and enable location.',
+        tone: 'error',
+      });
     }
   };
 
@@ -571,7 +611,7 @@ const HomeScreen = ({ navigation, route }) => {
                         {
                           id: 'route',
                           coordinates: routeCoords,
-                          color: '#2563eb',
+                          color: themeColors.accent,
                           width: 5,
                           geodesic: true,
                         },
@@ -608,7 +648,7 @@ const HomeScreen = ({ navigation, route }) => {
                         {
                           id: 'route',
                           coordinates: routeCoords,
-                          color: '#2563eb',
+                          color: themeColors.accent,
                           width: 5,
                         },
                       ]
@@ -621,7 +661,7 @@ const HomeScreen = ({ navigation, route }) => {
       </View>
       {showMapLoader && (
         <View style={styles.mapLoaderOverlay} pointerEvents="none">
-          <ActivityIndicator size="large" color="#2563eb" />
+          <ActivityIndicator size="large" color={themeColors.accent} />
           <Text style={styles.mapLoaderText}>Loading map...</Text>
         </View>
       )}
@@ -633,7 +673,7 @@ const HomeScreen = ({ navigation, route }) => {
           accessibilityRole="button"
           accessibilityLabel="Menu"
         >
-          <FontAwesome6 name="bars" size={18} color="#fff" solid />
+          <FontAwesome6 name="bars" size={18} color={themeColors.onAccent} solid />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.topBarBellBtn}
@@ -642,42 +682,37 @@ const HomeScreen = ({ navigation, route }) => {
           accessibilityRole="button"
           accessibilityLabel="Notifications"
         >
-          <FontAwesome6 name="bell" size={18} color="#334155" regular />
+          <FontAwesome6 name="bell" size={18} color={themeColors.textSecondary} regular />
           </TouchableOpacity>
       </View>
-      <Modal transparent visible={showLocationPrompt} animationType="fade" statusBarTranslucent>
-        <View style={styles.locationModalOverlay}>
-          <View style={styles.locationModalCard}>
-            <View style={styles.locationPulseWrap}>
-              <View style={styles.locationPulse3} />
-              <View style={styles.locationPulse2} />
-              <View style={styles.locationPulse1} />
-              <View style={styles.locationPulseCenter}>
-                <FontAwesome6 name="location-dot" size={18} color="#fff" solid />
-              </View>
-            </View>
-
-            <Text style={styles.locationModalTitle}>Enable your location</Text>
-            <Text style={styles.locationModalSubtitle}>
-              {locationPromptMode === 'services'
-                ? 'Location service is off. Enable GPS/Location to find nearby rides.'
-                : 'Choose your location to start finding rides around you.'}
+      {showLocationPrompt && (
+        <Animated.View
+          style={[
+            styles.locationBannerWrap,
+            { opacity: locationBannerOpacity, transform: [{ translateY: locationBannerY }] },
+          ]}
+          pointerEvents="box-none"
+        >
+          <TouchableOpacity
+            style={[
+              styles.locationBanner,
+              {
+                backgroundColor: '#f4c542',
+                borderColor: '#d8a917',
+              },
+            ]}
+            onPress={handleLocateMe}
+            activeOpacity={0.92}
+          >
+            <Text style={[styles.locationBannerTitle, { color: '#1f1f1f' }]}>
+              We couldn't find you
             </Text>
-
-            <TouchableOpacity style={styles.locationPrimaryBtn} onPress={handleLocateMe}>
-              <Text style={styles.locationPrimaryBtnText}>Use my location</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.locationSettingsBtn} onPress={openLocationSettings}>
-              <Text style={styles.locationSettingsBtnText}>Go to settings</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.locationSkipBtn} onPress={() => setShowLocationPrompt(false)}>
-              <Text style={styles.locationSkipBtnText}>Skip for now</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+            <Text style={[styles.locationBannerSubtitle, { color: '#2f2f2f' }]}>
+              {locationPromptMode === 'services' ? 'Tap to turn on location services' : 'Tap to enable location'}
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
       <Animated.View
         style={[
           styles.sheet,
@@ -707,17 +742,17 @@ const HomeScreen = ({ navigation, route }) => {
                 }
                 activeOpacity={0.85}
               >
-                <FontAwesome6 name="magnifying-glass" size={16} color="#2563eb" solid />
+                <FontAwesome6 name="magnifying-glass" size={16} color={themeColors.accent} solid />
                 <Text style={[styles.whereSearchText, destination ? styles.whereSearchTextActive : null]}>
                   {destination || 'Where would you go?'}
                 </Text>
-                <FontAwesome6 name="heart" size={16} color="#94a3b8" regular />
+                <FontAwesome6 name="heart" size={16} color={themeColors.textMuted} regular />
               </TouchableOpacity>
 
               <View style={styles.rideTypeRow}>
                 {RIDE_TYPE_OPTIONS.map((t) => {
                   const selected = rideType === t.id;
-                  const color = selected ? '#ffffff' : '#334155';
+                  const color = selected ? themeColors.onAccent : themeColors.textSecondary;
                   return (
                     <TouchableOpacity
                       key={t.id}
@@ -779,7 +814,7 @@ const HomeScreen = ({ navigation, route }) => {
               </View>
             )}
             <TouchableOpacity style={styles.compareBtn} onPress={handleCompare} disabled={loading}>
-              {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.compareBtnText}>Compare estimates</Text>}
+              {loading ? <ActivityIndicator size="small" color={themeColors.onAccent} /> : <Text style={styles.compareBtnText}>Compare estimates</Text>}
             </TouchableOpacity>
       <Text style={styles.disclaimer}>* Farely only provides estimates. Booking and final fare happen in provider apps.</Text>
         </>
@@ -824,7 +859,7 @@ const HomeScreen = ({ navigation, route }) => {
                           disabled={!!bookingLoadingId}
                         >
                           {isBooking ? (
-                            <ActivityIndicator size="small" color="#fff" />
+                            <ActivityIndicator size="small" color={themeColors.onAccent} />
                           ) : (
                 <Text style={styles.bookBtnText}>Book</Text>
                           )}
@@ -843,313 +878,5 @@ const HomeScreen = ({ navigation, route }) => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  mapFull: { ...StyleSheet.absoluteFillObject },
-  map: { flex: 1 },
-  loadingMap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  loadingText: { marginTop: 8, color: '#64748b' },
-  mapLoaderOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 5,
-  },
-  mapLoaderText: { marginTop: 10, color: '#334155', fontWeight: '600' },
-  locationModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(15,23,42,0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  locationModalCard: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 18,
-    alignItems: 'center',
-  },
-  locationPulseWrap: { width: 136, height: 136, alignItems: 'center', justifyContent: 'center' },
-  locationPulse3: { position: 'absolute', width: 122, height: 122, borderRadius: 61, backgroundColor: 'rgba(59,130,246,0.10)' },
-  locationPulse2: { position: 'absolute', width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(59,130,246,0.16)' },
-  locationPulse1: { position: 'absolute', width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(59,130,246,0.25)' },
-  locationPulseCenter: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center' },
-  locationModalTitle: { marginTop: 8, fontSize: 32, fontWeight: '700', color: '#1f2937' },
-  locationModalSubtitle: { marginTop: 12, fontSize: 16, lineHeight: 24, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 6 },
-  locationPrimaryBtn: {
-    marginTop: 22,
-    width: '100%',
-    backgroundColor: '#3b82f6',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  locationPrimaryBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
-  locationSettingsBtn: { marginTop: 12, paddingVertical: 8, paddingHorizontal: 12 },
-  locationSettingsBtnText: { color: '#3b82f6', fontSize: 16, fontWeight: '700' },
-  locationSkipBtn: { marginTop: 2, paddingVertical: 10, paddingHorizontal: 12 },
-  locationSkipBtnText: { color: '#b6bcc7', fontSize: 18, fontWeight: '600' },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '88%',
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    padding: 16,
-    zIndex: 2,
-    elevation: 2,
-  },
-  sheetHandleArea: { alignItems: 'center', paddingTop: 2, paddingBottom: 10 },
-  sheetHandle: { width: 42, height: 4, borderRadius: 999, backgroundColor: '#cbd5e1' },
-  modeRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  modeBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  modeBtnActive: { backgroundColor: '#2ecc71', borderColor: '#2ecc71' },
-  modeBtnText: { color: '#334155', fontWeight: '600' },
-  modeBtnTextActive: { color: '#fff' },
-  tipText: { color: '#64748b', marginBottom: 10, fontSize: 12 },
-  locateBtn: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  locateBtnText: { color: '#2ecc71', fontWeight: '700' },
-  locationError: { marginTop: 8, marginHorizontal: 16, color: '#dc2626', fontSize: 12 },
-  debugText: { marginTop: 6, marginBottom: 8, marginHorizontal: 0, color: '#64748b', fontSize: 12 },
-  resultsHeader: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  resultsHeaderText: { flex: 1, paddingRight: 12 },
-  resultsTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  resultsSubtitle: { marginTop: 4, color: '#64748b', fontSize: 12 },
-  bookingStatus: { marginTop: 6, color: '#16a34a', fontSize: 12, fontWeight: '600' },
-  changeLocationsBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-  },
-  changeLocationsText: { fontWeight: '700', color: '#334155' },
-  resultsListContent: { paddingBottom: 24 },
-  rideTypeRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  rideTypeRaster: { width: 26, height: 26 },
-  rideTypeRasterActive: { tintColor: '#fff' },
-  rideTypeChip: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 999,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  rideTypeChipActive: { backgroundColor: '#111827', borderColor: '#111827' },
-  carAcRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  carAcChip: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  carAcChipActive: { backgroundColor: '#eff6ff', borderColor: '#2563eb' },
-  carAcChipText: { fontSize: 12, fontWeight: '700', color: '#64748b' },
-  carAcChipTextActive: { color: '#1d4ed8' },
-  inputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  inputFlex: { flex: 1, marginBottom: 0, paddingRight: 44 },
-  clearBtn: {
-    position: 'absolute',
-    right: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clearBtnText: { fontSize: 18, color: '#334155', fontWeight: '700', marginTop: -2 },
-  input: { borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 10, marginBottom: 10 },
-  button: { backgroundColor: '#2ecc71', padding: 15, borderRadius: 8, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: 'bold' },
-  sortBtn: { marginTop: 10, alignSelf: 'flex-end' },
-  sortBtnText: { color: '#3498db', fontSize: 12 },
-  disclaimer: { fontSize: 10, color: '#95a5a6', marginTop: 10, fontStyle: 'italic' },
-  compareBtn: {
-    marginTop: 0,
-    backgroundColor: '#3b82f6',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  compareBtnText: { color: '#fff', fontWeight: '800' },
-  baseFareBanner: {
-    marginTop: 0,
-    marginBottom: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  baseFareLabel: { fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.3 },
-  baseFareValue: { marginTop: 4, fontSize: 18, fontWeight: '900', color: '#0f172a' },
-  baseFareHint: { marginTop: 4, fontSize: 11, color: '#64748b', fontWeight: '600' },
-  fareCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    marginHorizontal: 15,
-    marginTop: 15,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    elevation: 2
-  },
-  providerName: { fontSize: 18, fontWeight: 'bold' },
-  rideType: { color: '#7f8c8d' },
-  riderText: { color: '#64748b', fontSize: 12, marginTop: 4 },
-  riderMetaText: { color: '#64748b', fontSize: 12, marginTop: 2 },
-  priceContainer: { alignItems: 'flex-end' },
-  price: { fontSize: 18, fontWeight: 'bold', color: '#2ecc71', marginBottom: 5 },
-  bookBtn: { backgroundColor: '#3498db', paddingHorizontal: 15, paddingVertical: 5, borderRadius: 5 },
-  bookBtnText: { color: '#fff', fontSize: 12 },
-  emptyText: { textAlign: 'center', marginTop: 40, color: '#95a5a6' },
-
-  topBar: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 72 : 34,
-    left: 12,
-    right: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    zIndex: 60,
-    elevation: 60,
-  },
-  topBarBtn: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  topBarMenuBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 10,
-    backgroundColor: '#3b82f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  topBarBellBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-
-  whereCard: {
-    marginBottom: 8,
-    borderRadius: 18,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 12,
-  },
-  whereSearchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 2,
-  },
-  whereSearchText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#94a3b8',
-  },
-  whereSearchTextActive: { color: '#0f172a' },
-
-  rideOverlayCover: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    zIndex: 20,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    padding: 16,
-  },
-  rideOverlayCard: {
-    flex: 1,
-    borderRadius: 18,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    paddingBottom: 10,
-  },
-  rideOverlayHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  rideOverlayTitle: { fontSize: 16, fontWeight: '900', color: '#0f172a' },
-  rideOverlayChangeBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#f8fafc',
-  },
-  rideOverlayChangeBtnText: { fontWeight: '900', color: '#334155' },
-  rideOverlayListContent: { padding: 14, gap: 12, paddingBottom: 24 },
-
-  rideTypeLine: { marginTop: 4, color: '#334155', fontWeight: '700', fontSize: 12 },
-  bookBtnDisabled: { opacity: 0.7 }
-});
 
 export default HomeScreen;

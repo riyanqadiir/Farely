@@ -4,6 +4,7 @@ import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { useRideWidget } from '../context/RideWidgetContext';
 import { pushAppNotification } from '../utils/notifications';
 import { openPhoneDialer } from '../utils/phoneDialer';
+import { useTheme } from '../theme/ThemeContext';
 
 function formatTime(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -14,6 +15,7 @@ function formatTime(ms) {
 
 const RideWidget = ({ navigationRef }) => {
   const { activeRide, clearRideWidget } = useRideWidget();
+  const { colors, isDark } = useTheme();
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -29,32 +31,14 @@ const RideWidget = ({ navigationRef }) => {
 
   if (!activeRide) return null;
 
-  const handlePay = () => {
-    const nav = navigationRef?.current;
-    if (!nav) return;
+  const handleDone = () => {
     pushAppNotification({
-      type: 'transaction',
-      title: 'Payment opened',
-      body: 'Opened payment from ride widget.',
+      type: 'ride',
+      title: 'Trip card dismissed',
+      body: 'Pay and finalize your trip in the provider app.',
       meta: { rideId: activeRide.rideId || activeRide.id || null },
     });
-    nav.navigate('Payment', {
-      receipt: {
-        provider: activeRide.provider,
-        pickup: activeRide.pickup,
-        destination: activeRide.destination,
-        fare: activeRide.fare,
-        driverName: activeRide.driverName,
-        driverPhone: activeRide.driverPhone,
-        numberPlate: activeRide.numberPlate,
-        rideId: activeRide.rideId || activeRide.id,
-        paymentMethod: activeRide.paymentMethod || 'cash',
-        paymentMethodId: activeRide.paymentMethodId || null,
-      },
-      rideId: activeRide.rideId || activeRide.id,
-      selectedPaymentMethod: activeRide.paymentMethod || 'cash',
-      selectedPaymentMethodId: activeRide.paymentMethodId || null,
-    });
+    clearRideWidget();
   };
 
   const handleCancel = () => {
@@ -65,8 +49,9 @@ const RideWidget = ({ navigationRef }) => {
       meta: { rideId: activeRide.rideId || activeRide.id || null },
     });
     clearRideWidget();
-    const nav = navigationRef?.current;
-    if (nav) nav.navigate('Main', { screen: 'Rides' });
+    if (navigationRef?.isReady()) {
+      navigationRef.navigate('Main', { screen: 'Rides' });
+    }
   };
 
   const handleCallDriver = async () => {
@@ -89,9 +74,8 @@ const RideWidget = ({ navigationRef }) => {
   };
 
   const handleOpenBookedScreen = () => {
-    const nav = navigationRef?.current;
-    if (!nav) return;
-    nav.navigate('Chat', {
+    if (!navigationRef?.isReady()) return;
+    navigationRef.navigate('Chat', {
       booking: {
         driver: {
           name: activeRide.driverName || 'Driver',
@@ -115,21 +99,24 @@ const RideWidget = ({ navigationRef }) => {
     });
   };
 
+  const cardBg = isDark ? '#0f172a' : '#0c1222';
+  const cardBorder = isDark ? '#1e293b' : '#1e293b';
+
   return (
     <View pointerEvents="box-none" style={styles.wrap}>
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
         <TouchableOpacity activeOpacity={0.92} onPress={handleOpenBookedScreen}>
           <View style={styles.topRow}>
             <Text style={styles.title}>Ride in progress</Text>
-            <Text style={styles.timer}>{formatTime(remaining)}</Text>
+            <Text style={[styles.timer, { color: colors.success }]}>{formatTime(remaining)}</Text>
           </View>
           <Text style={styles.subtitle} numberOfLines={1}>
             {activeRide.provider || 'Farely'} • {activeRide.driverName || 'Driver'}
           </Text>
         </TouchableOpacity>
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.payBtn} onPress={handlePay}>
-            <Text style={styles.payBtnText}>Pay</Text>
+          <TouchableOpacity style={[styles.payBtn, { backgroundColor: colors.accent }]} onPress={handleDone}>
+            <Text style={[styles.payBtnText, { color: colors.onAccent }]}>Done</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.callBtn, !activeRide.driverPhone && styles.callBtnDisabled]}
@@ -138,7 +125,7 @@ const RideWidget = ({ navigationRef }) => {
             accessibilityRole="button"
             accessibilityLabel="Call driver"
           >
-            <FontAwesome6 name="phone" size={14} color="#fff" solid />
+            <FontAwesome6 name="phone" size={14} color={colors.onAccent} solid />
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
             <Text style={styles.cancelBtnText}>Cancel ride</Text>
@@ -163,22 +150,20 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '92%',
-    backgroundColor: '#0f172a',
     borderRadius: 14,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#1e293b',
   },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { color: '#fff', fontWeight: '900' },
-  timer: { color: '#86efac', fontWeight: '900' },
+  timer: { fontWeight: '900' },
   subtitle: { marginTop: 6, color: '#cbd5e1', fontWeight: '700', fontSize: 12 },
   actionsRow: { marginTop: 10, flexDirection: 'row', gap: 8, alignItems: 'stretch' },
-  payBtn: { flex: 1, backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
-  payBtnText: { color: '#fff', fontWeight: '900' },
+  payBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  payBtnText: { fontWeight: '900' },
   callBtn: {
     width: 44,
-    backgroundColor: '#0d9488',
+    backgroundColor: '#0f766e',
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',

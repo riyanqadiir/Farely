@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "scheme": "farely",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "plugins": [
       [
@@ -35,14 +35,12 @@
         "LSApplicationQueriesSchemes": [
           "tel",
           "telprompt",
-          "indrive",
-          "indriver",
+          "uber",
           "geo",
           "yandexyango",
           "yango",
           "bykea",
-          "bykeapk",
-          "careem"
+          "bykeapk"
         ]
       }
     },

@@ -50,9 +50,6 @@ export const RideWidgetProvider = ({ children }) => {
         pickup: payload?.pickup || '',
         destination: payload?.destination || '',
         fare: payload?.fare ?? null,
-        paymentMethod: payload?.paymentMethod || "cash",
-        paymentMethodId: payload?.paymentMethodId || null,
-        paymentMethodLabel: payload?.paymentMethodLabel || "Cash",
         expiresAt,
         startedAt: Date.now(),
       };

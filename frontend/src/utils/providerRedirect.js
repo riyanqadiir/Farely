@@ -82,7 +82,7 @@ function bykeaHandoffQueryString(handoff) {
   ].join('&');
 }
 
-/** Generic keys for providers without a documented scheme (inDrive, Careem, …). */
+/** Generic keys for providers without a documented scheme (legacy / unknown). */
 function genericHandoffQueryString(handoff) {
   const h = normalizeRideHandoff(handoff);
   if (!h) return '';
@@ -195,43 +195,19 @@ function useYangoAppmetricaRedirect() {
 }
 
 /**
- * inDrive: no public passenger deeplink spec found in search; order follows
- * sinet.startup.inDriver manifest (https indrive.com/app, indrive://open, geo:).
- *
- * Try explicit `open/ride` custom-scheme URLs before `https://.../app?...`:
- * the HTTPS links often open the app shell while ignoring unknown query keys,
- * and Linking would stop at the first successful openURL (no prefill).
+ * Uber: prefer universal link + custom scheme (no Android intent://).
+ * Full booking will move to Rider API once OAuth scopes are approved.
  */
-function buildInDriveDeepLinkCandidates(pickup, dropoff, handoff) {
+function buildUberDeepLinkCandidates(pickup, dropoff, handoff) {
   const plat = pickup.latitude;
   const plon = pickup.longitude;
   const dlat = dropoff.latitude;
   const dlon = dropoff.longitude;
-  const pickupLatLng = `${plat},${plon}`;
-  const dropLatLng = `${dlat},${dlon}`;
-  const pickupLngLat = `${plon},${plat}`;
-  const dropLngLat = `${dlon},${dlat}`;
-
   const list = [
-    `indrive://open/ride?pickup=${pickupLatLng}&dropoff=${dropLatLng}`,
-    `indriver://open/ride?pickup=${pickupLatLng}&dropoff=${dropLatLng}`,
-    `indrive://open/ride?pickup=${pickupLngLat}&dropoff=${dropLngLat}`,
-    `indriver://open/ride?pickup=${pickupLngLat}&dropoff=${dropLngLat}`,
-    `indrive://open?from_lat=${plat}&from_lon=${plon}&to_lat=${dlat}&to_lon=${dlon}`,
-    `indriver://open?from_lat=${plat}&from_lon=${plon}&to_lat=${dlat}&to_lon=${dlon}`,
-    `https://indrive.com/app?from_lat=${plat}&from_lon=${plon}&to_lat=${dlat}&to_lon=${dlon}`,
-    `https://indriver.com/app?from_lat=${plat}&from_lon=${plon}&to_lat=${dlat}&to_lon=${dlon}`,
-    `https://indrive.com/app?pickup_lat=${plat}&pickup_lon=${plon}&dropoff_lat=${dlat}&dropoff_lon=${dlon}`,
-    'indrive://open',
-    'indriver://open',
+    `https://m.uber.com/ul/?action=setPickup&pickup[latitude]=${plat}&pickup[longitude]=${plon}&dropoff[latitude]=${dlat}&dropoff[longitude]=${dlon}`,
+    `uber://?action=setPickup&pickup[latitude]=${plat}&pickup[longitude]=${plon}&dropoff[latitude]=${dlat}&dropoff[longitude]=${dlon}`,
     `geo:${dlat},${dlon}?q=${encodeURIComponent(`${dlat},${dlon}`)}`,
-    `indrive://inapp.ride?pickup=${pickupLatLng}&dropoff=${dropLatLng}`,
   ];
-
-  if (Platform.OS === 'android') {
-    list.push('intent://#Intent;package=sinet.startup.inDriver;end');
-  }
-
   return mapUrlsWithProviderHandoff(list, handoff, 'generic');
 }
 
@@ -241,7 +217,7 @@ const BYKEA_ANDROID_PACKAGE = 'com.bykea.pk';
 /**
  * Bykea: no public passenger deeplink spec found. Candidates follow common
  * ride-app patterns (custom scheme + pickup/drop query shapes, geo:, package launch).
- * Order: structured URLs first, then bare scheme, geo, intent — same strategy as inDrive.
+ * Order: structured URLs first, then bare scheme, geo, then package intents as last resort.
  */
 function bykeaServicePathSegment(handoff) {
   const h = normalizeRideHandoff(handoff);
@@ -278,6 +254,7 @@ function buildBykeaDeepLinkCandidates(pickup, dropoff, handoff) {
   const dropLngLat = `${dlon},${dlat}`;
   const seg = bykeaServicePathSegment(handoff);
   const h = normalizeRideHandoff(handoff);
+  const tripType = bykeaTripTypeFromHandoff(handoff);
   const carAcQ = h && h.rideType === 'car'
     ? `&ac=${h.carAc ? '1' : '0'}&carAc=${h.carAc ? 'true' : 'false'}`
     : '';
@@ -288,7 +265,13 @@ function buildBykeaDeepLinkCandidates(pickup, dropoff, handoff) {
   if (flatModeQs) {
     prioritized.push(
       `bykea://open/ride?pickup=${pickupLatLng}&dropoff=${dropLatLng}&${flatModeQs}`,
-      `bykeapk://open/ride?pickup=${pickupLatLng}&dropoff=${dropLatLng}&${flatModeQs}`
+      `bykeapk://open/ride?pickup=${pickupLatLng}&dropoff=${dropLatLng}&${flatModeQs}`,
+      ...(typeof tripType === 'number'
+        ? [
+            `bykea://open/ride?pickup=${pickupLatLng}&dropoff=${dropLatLng}&${flatModeQs}&trip_type=${tripType}`,
+            `bykeapk://open/ride?pickup=${pickupLatLng}&dropoff=${dropLatLng}&${flatModeQs}&trip_type=${tripType}`,
+          ]
+        : [])
     );
   }
   prioritized.push(
@@ -312,16 +295,16 @@ function buildBykeaDeepLinkCandidates(pickup, dropoff, handoff) {
     `bykea://open/ride?pickup=${pickupLngLat}&dropoff=${dropLngLat}`,
     'bykea://',
     'bykeapk://',
-    `geo:${dlat},${dlon}?q=${encodeURIComponent(`${dlat},${dlon}`)}`,
-    'android-app://com.bykea.pk',
   ];
+  // Prefer geo before plain package launch so users at least get destination map pinned.
+  list.push(`geo:${dlat},${dlon}?q=${encodeURIComponent(`${dlat},${dlon}`)}`);
 
   if (Platform.OS === 'android') {
-    const tripType = bykeaTripTypeFromHandoff(handoff);
-    // Try an explicit intent URI with extras FIRST (many bykea:// URLs open the app but ignore ride type,
-    // which makes it look like "AC car always opens" because Bykea restores the last-selected tab).
+    // Keep intent-based trip_type at the end: explicit intents can force an unintended default screen
+    // on some Bykea builds. We prefer URL-based location handoff first.
+    // Keep package intents after geo fallback: they can open app home without route prefill.
     if (typeof tripType === 'number') {
-      list.unshift(
+      list.push(
         `intent:#Intent;package=${BYKEA_ANDROID_PACKAGE};`
         + 'action=android.intent.action.VIEW;'
         + `component=${BYKEA_ANDROID_PACKAGE}/com.bykea.pk.screens.activities.create_ride.CreateRideBookingActivity;`
@@ -330,12 +313,21 @@ function buildBykeaDeepLinkCandidates(pickup, dropoff, handoff) {
       );
     }
     list.push(`intent:#Intent;package=${BYKEA_ANDROID_PACKAGE};end`);
+    list.push(`android-app://${BYKEA_ANDROID_PACKAGE}`);
   }
 
   return mapUrlsWithProviderHandoff(list, handoff, 'bykea');
 }
 
+
 const PROVIDER_LINKS = {
+  Uber: {
+    deepLinkCandidates: ({ pickup, dropoff, handoff }) => buildUberDeepLinkCandidates(pickup, dropoff, handoff),
+    appPresenceScheme: 'uber://',
+    fallback: Platform.OS === 'android'
+      ? 'https://play.google.com/store/apps/details?id=com.ubercab'
+      : 'https://apps.apple.com/app/uber/id368677368',
+  },
   Yango: {
     deepLinkCandidates: ({ pickup, dropoff, handoff }) => {
       const pickupStr = toIntentCoords(pickup);
@@ -393,27 +385,6 @@ const PROVIDER_LINKS = {
     },
     appPresenceScheme: 'yandexyango://',
     fallback: 'https://yango.com/en_int/',
-  },
-  inDrive: {
-    deepLinkCandidates: ({ pickup, dropoff, handoff }) => buildInDriveDeepLinkCandidates(pickup, dropoff, handoff),
-    appPresenceScheme: 'indrive://open',
-    fallback: Platform.OS === 'android'
-      ? 'https://play.google.com/store/apps/details?id=sinet.startup.inDriver'
-      : 'https://apps.apple.com/app/indrive/id780125801',
-  },
-  Careem: {
-    deepLinkCandidates: ({ pickup, dropoff, handoff }) => {
-      const pickupStr = toIntentCoords(pickup);
-      const dropoffStr = toIntentCoords(dropoff);
-      const list = [
-        `careem://ride?pickup=${pickupStr}&dropoff=${dropoffStr}`,
-        `careem://open?pickup=${pickupStr}&dropoff=${dropoffStr}`,
-        'careem://',
-      ];
-      return mapUrlsWithProviderHandoff(list, handoff, 'generic');
-    },
-    appPresenceScheme: 'careem://',
-    fallback: 'https://www.careem.com/',
   },
   Bykea: {
     deepLinkCandidates: ({ pickup, dropoff, handoff }) => buildBykeaDeepLinkCandidates(pickup, dropoff, handoff),

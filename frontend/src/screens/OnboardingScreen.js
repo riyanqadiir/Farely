@@ -25,7 +25,7 @@ const SLIDES = [
   {
     id: '1',
     headline: 'Anywhere you are',
-    description: 'Compare ride fares and ETAs across Careem, Yango, inDrive, and Bykea—all in one place.',
+    description: 'Compare ride fares and ETAs across Uber, Yango, and Bykea — in one place.',
     Illustration: Slide1Illustration,
   },
   {
@@ -37,7 +37,7 @@ const SLIDES = [
   {
     id: '3',
     headline: 'Book your car',
-    description: 'Pick the best option, pay from your wallet, and go. Simple, transparent, and convenient.',
+    description: 'Pick the best option and continue in the provider app. Simple, transparent, and convenient.',
     Illustration: Slide3Illustration,
     isLast: true,
   },

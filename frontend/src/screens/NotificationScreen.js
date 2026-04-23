@@ -5,6 +5,7 @@ import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { useFocusEffect } from '@react-navigation/native';
 import { getAppNotifications } from '../utils/notifications';
 import { runAfterNavigationTransition } from '../utils/navigationTiming';
+import { useTheme } from '../theme/ThemeContext';
 
 const FALLBACK_ITEMS = [
   {
@@ -34,23 +35,27 @@ function relativeTime(iso) {
   return 'Yesterday';
 }
 
-const Section = ({ title, items }) => (
+const Section = ({ title, items, colors, styles }) => (
   <View style={styles.section}>
-    <Text style={styles.sectionTitle}>{title}</Text>
+    <Text style={[styles.sectionTitle, { color: colors.accentSecondary }]}>{title}</Text>
     {items.map((n) => (
-      <View key={n.id} style={styles.card}>
+      <View key={n.id} style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
         <View style={styles.cardTop}>
-          <FontAwesome6 name="bell" size={14} color="#ffffff" solid />
-          <Text style={styles.cardTitle}>{n.title}</Text>
+          <View style={[styles.iconBadge, { backgroundColor: colors.accent }]}>
+            <FontAwesome6 name="bell" size={12} color={colors.onAccent} solid />
+          </View>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{n.title}</Text>
         </View>
-        <Text style={styles.cardBody}>{n.body}</Text>
-        <Text style={styles.cardTime}>{n.time}</Text>
+        <Text style={[styles.cardBody, { color: colors.textSecondary }]}>{n.body}</Text>
+        <Text style={[styles.cardTime, { color: colors.textMuted }]}>{n.time}</Text>
       </View>
     ))}
   </View>
 );
 
 const NotificationScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(), []);
   const [items, setItems] = useState(FALLBACK_ITEMS);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -95,20 +100,20 @@ const NotificationScreen = ({ navigation }) => {
   }, [items]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <View style={styles.container}>
-        <View style={styles.header}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top', 'bottom']}>
+      <View style={[styles.container, { backgroundColor: colors.bg }]}>
+        <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => navigation.goBack()}
             accessibilityRole="button"
             accessibilityLabel="Back"
           >
-            <FontAwesome6 name="chevron-left" size={16} color="#2563eb" solid />
-            <Text style={styles.backBtnText}>Back</Text>
+            <FontAwesome6 name="chevron-left" size={16} color={colors.accent} solid />
+            <Text style={[styles.backBtnText, { color: colors.accent }]}>Back</Text>
           </TouchableOpacity>
 
-          <Text style={styles.headerTitle}>Notifications</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Notifications</Text>
 
           <View style={{ width: 90 }} />
         </View>
@@ -123,14 +128,20 @@ const NotificationScreen = ({ navigation }) => {
           <Section
             title="Today"
             items={todayItems.map((n) => ({ ...n, time: relativeTime(n.createdAt) }))}
+            colors={colors}
+            styles={styles}
           />
           <Section
             title="Yesterday"
             items={yesterdayItems.map((n) => ({ ...n, time: relativeTime(n.createdAt) }))}
+            colors={colors}
+            styles={styles}
           />
           <Section
             title="Earlier"
             items={earlierItems.map((n) => ({ ...n, time: relativeTime(n.createdAt) }))}
+            colors={colors}
+            styles={styles}
           />
         </ScrollView>
       </View>
@@ -141,8 +152,8 @@ const NotificationScreen = ({ navigation }) => {
 export default NotificationScreen;
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#ffffff' },
-  container: { flex: 1, backgroundColor: '#ffffff' },
+  safe: { flex: 1 },
+  container: { flex: 1 },
   header: {
     paddingHorizontal: 16,
     paddingTop: 10,
@@ -159,20 +170,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  backBtnText: { color: '#2563eb', fontWeight: '800' },
-  headerTitle: { flex: 1, textAlign: 'center', fontWeight: '900', color: '#0f172a', fontSize: 18 },
+  backBtnText: { fontWeight: '800' },
+  headerTitle: { flex: 1, textAlign: 'center', fontWeight: '900', fontSize: 18 },
   scrollContent: { padding: 16, paddingBottom: 28 },
   section: { marginBottom: 18 },
-  sectionTitle: { fontSize: 14, fontWeight: '900', color: '#2563eb', marginBottom: 10 },
+  sectionTitle: { fontSize: 14, fontWeight: '900', marginBottom: 10 },
   card: {
-    backgroundColor: '#2563eb',
+    borderWidth: 1,
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
   },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
-  cardTitle: { color: '#fff', fontSize: 14, fontWeight: '900' },
-  cardBody: { color: '#e0e7ff', fontSize: 12, lineHeight: 18, marginBottom: 8 },
-  cardTime: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '700' },
+  iconBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontSize: 14, fontWeight: '900' },
+  cardBody: { fontSize: 12, lineHeight: 18, marginBottom: 8, fontWeight: '600' },
+  cardTime: { fontSize: 11, fontWeight: '700' },
 });
 

@@ -10,7 +10,7 @@ const FAQ = [
   },
   {
     q: 'How do I pay?',
-    a: 'You can pay with wallet balance, cash, or a saved card where available. Add cards under Menu → Payment methods.',
+    a: 'Farely does not collect fares. After you open Uber, Yango, or Bykea, payment and checkout happen only inside that provider’s app.',
   },
   {
     q: 'Who do I contact for a lost item?',
