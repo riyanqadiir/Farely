@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Farely Admin</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="topbar">
+        <h1>Farely Admin Monitor</h1>
+        <p>Aggregator operations: searches, provider selections, support tickets.</p>
+      </header>
+
+      <section class="auth">
+        <label for="apiBase">API Base URL</label>
+        <input id="apiBase" value="http://localhost:3000" />
+        <label for="token">Admin Bearer Token</label>
+        <input id="token" placeholder="Paste JWT token from admin login" />
+        <button id="loadBtn">Load Dashboard</button>
+      </section>
+
+      <section>
+        <h2>Ride Searches</h2>
+        <input id="searchQuery" placeholder="Search pickup/destination..." />
+        <button id="refreshSearches">Refresh</button>
+        <div id="searchesTable"></div>
+      </section>
+
+      <section>
+        <h2>Provider Selections</h2>
+        <input id="providerQuery" placeholder="Filter provider (Yango/inDrive/Careem/Bykea)" />
+        <button id="refreshSelections">Refresh</button>
+        <div id="selectionsTable"></div>
+      </section>
+
+      <section>
+        <h2>Support Tickets</h2>
+        <input id="ticketStatus" placeholder="Filter status (open/in_progress/resolved)" />
+        <button id="refreshTickets">Refresh</button>
+        <div id="ticketsTable"></div>
+      </section>
+    </main>
+    <script src="./main.js"></script>
+  </body>
+  </html>

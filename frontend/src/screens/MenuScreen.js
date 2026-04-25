@@ -1,9 +1,10 @@
-import React, { useContext } from 'react';
+import React, { useContext, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { navigationRef } from '../navigation/rootNavigation';
 import { AuthContext } from '../context/AuthContext';
+import { useTheme } from '../theme/ThemeContext';
 
 /** Root stack lives on NavigationContainer; local `navigation` from Menu can miss sibling routes on some builds. */
 function goTo(name, params) {
@@ -12,28 +13,10 @@ function goTo(name, params) {
   }
 }
 
-const Section = ({ title, children }) => (
-  <View style={styles.sectionWrap}>
-    <Text style={styles.sectionTitle}>{title}</Text>
-    {children}
-  </View>
-);
-
-const MenuRow = ({ icon, label, subtitle, onPress }) => (
-  <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.85}>
-    <View style={styles.rowIconWrap}>
-      <FontAwesome6 name={icon} size={16} color="#334155" solid />
-    </View>
-    <View style={styles.rowTextWrap}>
-      <Text style={styles.rowText}>{label}</Text>
-      {!!subtitle && <Text style={styles.rowSub}>{subtitle}</Text>}
-    </View>
-    <FontAwesome6 name="chevron-right" size={12} color="#94a3b8" solid />
-  </TouchableOpacity>
-);
-
 const MenuScreen = () => {
   const { logout } = useContext(AuthContext);
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(), []);
 
   const handleLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to log out of Farely?', [
@@ -42,110 +25,137 @@ const MenuScreen = () => {
     ]);
   };
 
+  const Section = ({ title, children }) => (
+    <View style={styles.sectionWrap}>
+      <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</Text>
+      {children}
+    </View>
+  );
+
+  const MenuRow = ({ icon, label, subtitle, onPress }) => (
+    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.rowIconWrap}>
+        <FontAwesome6 name={icon} size={16} color={colors.textSecondary} solid />
+      </View>
+      <View style={styles.rowTextWrap}>
+        <Text style={[styles.rowText, { color: colors.text }]}>{label}</Text>
+        {!!subtitle && <Text style={[styles.rowSub, { color: colors.textSecondary }]}>{subtitle}</Text>}
+      </View>
+      <FontAwesome6 name="chevron-right" size={12} color={colors.textMuted} solid />
+    </TouchableOpacity>
+  );
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top', 'bottom']}>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => goTo('Main', { screen: 'Rides' })} style={styles.backBtn}>
-          <FontAwesome6 name="chevron-left" size={14} color="#2563eb" solid />
-          <Text style={styles.backText}>Back</Text>
+          <FontAwesome6 name="chevron-left" size={14} color={colors.accent} solid />
+          <Text style={[styles.backText, { color: colors.accent }]}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Menu</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Menu</Text>
         <View style={{ width: 64 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.intro}>Account, payments, preferences, and legal — same structure as major ride apps.</Text>
+        <Text style={[styles.intro, { color: colors.textSecondary }]}>
+          Farely compares Uber, Yango, and Bykea side by side. Book and pay only inside the provider you choose.
+        </Text>
 
         <Section title="Account">
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
             <MenuRow
               icon="user"
               label="Profile"
               subtitle="Name, photo, city & address"
-              onPress={() => goTo('Main', { screen: 'Profile', params: { fromMenu: true } })}
+              onPress={() => goTo('MenuProfile')}
             />
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="shield"
               label="Account & security"
-              subtitle="Password, sign-in, payment shortcuts"
+              subtitle="Password and sign-in"
               onPress={() => goTo('AccountSettings')}
             />
           </View>
         </Section>
 
-        <Section title="Payments">
-          <View style={styles.card}>
-            <MenuRow
-              icon="wallet"
-              label="Wallet"
-              subtitle="Balance, top-up, trip history"
-              onPress={() => goTo('Main', { screen: 'Wallet', params: { fromMenu: true } })}
-            />
-            <View style={styles.divider} />
-            <MenuRow
-              icon="credit-card"
-              label="Payment methods"
-              subtitle="Cards on file, default card"
-              onPress={() => goTo('PaymentMethods')}
-            />
-          </View>
-        </Section>
-
         <Section title="Preferences">
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
             <MenuRow
               icon="bell"
               label="Notifications"
-              subtitle="Ride and transaction alerts"
+              subtitle="Ride and product updates"
               onPress={() => goTo('Notification')}
             />
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="sliders"
               label="App settings"
-              subtitle="Push, receipts, preferences"
+              subtitle="Appearance, email receipts, toggles"
               onPress={() => goTo('AppSettings')}
+            />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <MenuRow
+              icon="clock-rotate-left"
+              label="Ride history"
+              subtitle="Confirmed rides after provider return"
+              onPress={() => goTo('RideHistory')}
+            />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <MenuRow
+              icon="clipboard-check"
+              label="Pending ride reviews"
+              subtitle="Confirm rides you skipped for later"
+              onPress={() => goTo('RideReview')}
             />
           </View>
         </Section>
 
         <Section title="Help & legal">
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+            <MenuRow
+              icon="star"
+              label="Send feedback"
+              subtitle="Rate the app and how Farely helps you"
+              onPress={() => goTo('Feedback', { source: 'menu' })}
+            />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="comments"
               label="Help & support"
-              subtitle="FAQ, contact, links to policies"
+              subtitle="FAQ and contact"
               onPress={() => goTo('HelpSupport')}
             />
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="circle-info"
               label="About Farely"
-              subtitle="Version, what the app does"
+              subtitle="Version and product summary"
               onPress={() => goTo('About')}
             />
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="file-lines"
               label="Terms of service"
               onPress={() => goTo('Terms')}
             />
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="lock"
               label="Privacy policy"
               subtitle="How we use your data"
               onPress={() => goTo('PrivacyPolicy')}
             />
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <TouchableOpacity style={styles.logoutRow} onPress={handleLogout} activeOpacity={0.85}>
               <View style={styles.rowIconWrap}>
-                <FontAwesome6 name="right-from-bracket" size={16} color="#dc2626" solid />
+                <FontAwesome6 name="right-from-bracket" size={16} color={colors.danger} solid />
               </View>
               <View style={styles.rowTextWrap}>
-                <Text style={styles.logoutLabel}>Log out</Text>
-                <Text style={styles.logoutSub}>Sign out of your account on this device</Text>
+                <Text style={[styles.logoutLabel, { color: colors.danger }]}>Log out</Text>
+                <Text style={[styles.logoutSub, { color: colors.textMuted }]}>
+                  Sign out on this device
+                </Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -157,65 +167,61 @@ const MenuScreen = () => {
 
 export default MenuScreen;
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f8fafc' },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-  },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 88 },
-  backText: { color: '#2563eb', fontWeight: '800', fontSize: 12 },
-  title: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
-  scroll: { padding: 16, paddingBottom: 32 },
-  intro: {
-    fontSize: 13,
-    color: '#64748b',
-    lineHeight: 19,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  sectionWrap: { marginBottom: 18 },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#64748b',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 8,
-  },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    overflow: 'hidden',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    gap: 10,
-  },
-  rowIconWrap: { width: 28, alignItems: 'center' },
-  rowTextWrap: { flex: 1 },
-  rowText: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
-  rowSub: { fontSize: 12, color: '#64748b', fontWeight: '600', marginTop: 3 },
-  divider: { height: 1, backgroundColor: '#f1f5f9', marginLeft: 50 },
-  logoutRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    gap: 10,
-  },
-  logoutLabel: { fontSize: 15, fontWeight: '800', color: '#dc2626' },
-  logoutSub: { fontSize: 12, color: '#94a3b8', fontWeight: '600', marginTop: 3 },
-});
+function createStyles() {
+  return StyleSheet.create({
+    safe: { flex: 1 },
+    header: {
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      paddingBottom: 14,
+      borderBottomWidth: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 88 },
+    backText: { fontWeight: '800', fontSize: 12 },
+    title: { fontSize: 18, fontWeight: '900' },
+    scroll: { padding: 16, paddingBottom: 32 },
+    intro: {
+      fontSize: 13,
+      lineHeight: 19,
+      fontWeight: '600',
+      marginBottom: 16,
+    },
+    sectionWrap: { marginBottom: 18 },
+    sectionTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginBottom: 8,
+    },
+    card: {
+      borderRadius: 14,
+      borderWidth: 1,
+      overflow: 'hidden',
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 14,
+      paddingHorizontal: 12,
+      gap: 10,
+    },
+    rowIconWrap: { width: 28, alignItems: 'center' },
+    rowTextWrap: { flex: 1 },
+    rowText: { fontSize: 15, fontWeight: '800' },
+    rowSub: { fontSize: 12, fontWeight: '600', marginTop: 3 },
+    divider: { height: 1, marginLeft: 50 },
+    logoutRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 14,
+      paddingHorizontal: 12,
+      gap: 10,
+    },
+    logoutLabel: { fontSize: 15, fontWeight: '800' },
+    logoutSub: { fontSize: 12, fontWeight: '600', marginTop: 3 },
+  });
+}

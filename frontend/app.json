@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "scheme": "farely",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "plugins": [
       [
@@ -32,7 +32,16 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.farely.app",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["tel", "telprompt"]
+        "LSApplicationQueriesSchemes": [
+          "tel",
+          "telprompt",
+          "uber",
+          "geo",
+          "yandexyango",
+          "yango",
+          "bykea",
+          "bykeapk"
+        ]
       }
     },
     "android": {

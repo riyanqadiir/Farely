@@ -56,6 +56,8 @@ const UserSchema = new mongoose.Schema(
     passwordChangedAt: { type: Date, default: null },
     passwordResetRequestedAt: { type: Date, default: null },
     lastPasswordResetAt: { type: Date, default: null },
+    /** Updated on app foreground (heartbeat) for operational analytics. */
+    lastActiveAt: { type: Date, default: null, index: true },
   },
   {
     timestamps: true,

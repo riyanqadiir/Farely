@@ -21,6 +21,7 @@ const AccountSettingsScreen = ({ navigation }) => {
   const { user } = useContext(AuthContext);
   const email = user?.email || '—';
   const phone = user?.phone || user?.loginId || '—';
+  const openMenuProfile = () => navigation.navigate('MenuProfile');
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -40,14 +41,14 @@ const AccountSettingsScreen = ({ navigation }) => {
             icon="user"
             label="Profile"
             subtitle="Name, photo, address"
-            onPress={() => navigation.navigate('Main', { screen: 'Profile', params: { fromMenu: true } })}
+            onPress={openMenuProfile}
           />
           <View style={styles.divider} />
           <Row
             icon="envelope"
             label="Email & phone"
             subtitle={`${email} · ${phone}`}
-            onPress={() => navigation.navigate('Main', { screen: 'Profile', params: { fromMenu: true } })}
+            onPress={openMenuProfile}
           />
         </View>
 
@@ -58,13 +59,6 @@ const AccountSettingsScreen = ({ navigation }) => {
             label="Change password"
             subtitle="Current password and new password"
             onPress={() => navigation.navigate('ChangePassword')}
-          />
-          <View style={styles.divider} />
-          <Row
-            icon="credit-card"
-            label="Payment methods"
-            subtitle="Cards on file for rides"
-            onPress={() => navigation.navigate('PaymentMethods')}
           />
         </View>
 

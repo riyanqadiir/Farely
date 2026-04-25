@@ -9,6 +9,7 @@ router.use(protect);
 
 router.get("/", profileController.getProfile);
 router.put("/", profileValidators.updateProfile, validate, profileController.updateProfile);
+router.post("/heartbeat", profileController.heartbeat);
 router.post("/photo", profileController.uploadPhoto);
 
 module.exports = router;

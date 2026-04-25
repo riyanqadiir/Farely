@@ -43,8 +43,18 @@ async function sendOtpEmail(toEmail, otp, purpose = "verification") {
   sendSmtpEmail.sender = DEFAULT_SENDER;
   sendSmtpEmail.to = [{ email: toEmail }];
 
-  const data = await client.sendTransacEmail(sendSmtpEmail);
-  return data;
+  try {
+    const data = await client.sendTransacEmail(sendSmtpEmail);
+    return data;
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[DEV] Brevo sendOtpEmail failed. Falling back to console OTP.");
+      console.warn("[DEV] Reason:", err?.message || "Unknown Brevo error");
+      console.log("[DEV] Email OTP to", toEmail, ":", otp);
+      return { messageId: "dev-fallback-" + Date.now() };
+    }
+    throw err;
+  }
 }
 
 /**
@@ -61,7 +71,17 @@ async function sendTransactionalEmail(toEmail, subject, htmlContent) {
   sendSmtpEmail.htmlContent = htmlContent;
   sendSmtpEmail.sender = DEFAULT_SENDER;
   sendSmtpEmail.to = [{ email: toEmail }];
-  return client.sendTransacEmail(sendSmtpEmail);
+  try {
+    return await client.sendTransacEmail(sendSmtpEmail);
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[DEV] Brevo sendTransactionalEmail failed. Falling back to console log.");
+      console.warn("[DEV] Reason:", err?.message || "Unknown Brevo error");
+      console.log("[DEV] Email to", toEmail, subject);
+      return { messageId: "dev-fallback-" + Date.now() };
+    }
+    throw err;
+  }
 }
 
 module.exports = {

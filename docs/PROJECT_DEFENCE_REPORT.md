@@ -22,9 +22,9 @@
 
 - **Problem:** In one sentence, describe manual fare comparison across multiple ride-hailing apps in Pakistan (context: Careem, Yango, inDrive — academic context only).
 - **Gap:** What users lack today (time, cognitive load, no single view of fares).
-- **Objective:** Deliver a mobile-first app that compares fares and supports booking flow with a unified wallet concept.
-- **Method:** React Native (Expo) client, Node.js/Express REST API, MongoDB, JWT authentication, third-party maps/places as configured.
-- **Key results:** List 3–5 concrete outcomes (working auth flows, fare estimate/compare API, wallet operations, profile, etc.).
+- **Objective:** Deliver a mobile-first app that compares estimated fares and redirects users to provider apps where booking is completed.
+- **Method:** React Native (Expo) client, Node.js/Express REST API, MongoDB, JWT authentication, estimation engine, deep-link/fallback redirection.
+- **Key results:** List 3-5 concrete outcomes (working auth flows, estimate comparison API, deep-link redirect flow, admin monitoring panel, profile/support operations).
 - **Conclusion line:** One sentence on feasibility and contribution of the FYP.
 
 ### Keywords (prompts)
@@ -40,7 +40,7 @@
 - Describe growth of ride-hailing in urban Pakistan (general, cited).
 - Explain **multi-homing**: users installing more than one app.
 - Explain why comparing fares across apps is tedious (switching apps, re-typing locations).
-- Position Farely as a **fare comparison** aid (not a replacement for provider contracts).
+- Position Farely as a **fare comparison + redirect aggregator** (not a replacement for provider contracts).
 
 ### 1.2 Problem statement
 
@@ -53,8 +53,8 @@
 - **Primary objectives (SMART where possible):**
   - Enable user registration/login with secure session handling.
   - Obtain pickup/destination and show comparable fare options.
-  - Support a booking/chat flow consistent with the implemented demo.
-  - Provide wallet balance and transaction history (as implemented).
+  - Support provider app handoff via deep link/fallback for final booking.
+  - Provide operational monitoring through admin views (searches, provider selections, support).
 - **Secondary objectives:**
   - Profile completion and photo upload (if enabled in build).
   - Account security: forgot-password vs change-password distinction.
@@ -113,7 +113,7 @@ For each numbered FR, state **what** the system shall do; reference module/scree
 - **FR-AUTH-CHANGE:** Logged-in change password (current + new + confirm) via Bearer token.
 - **FR-PROFILE:** View/update profile; optional profile photo upload.
 - **FR-LOCATION:** Map/home flow; location search; pickup/destination handoff (as in app).
-- **FR-RIDES:** Minimum fare estimate for coordinates and ride type; compare list; book/compare action leading to driver assignment (as implemented).
+- **FR-RIDES:** Minimum fare estimate for coordinates and ride type; compare estimated list; redirect action to provider app.
 - **FR-RIDE-UI:** Post-booking chat/contact flows; ride widget context (if described).
 - **FR-WALLET:** Balance; history; top-up; pay ride (idempotent rules as implemented).
 - **FR-SETTINGS:** Menu, notifications list, legal screens, app settings (local prefs).
@@ -214,7 +214,7 @@ flowchart LR
 
 ### 4.8 Design decisions and trade-offs
 
-- Why MongoDB (flexible schema, FYP speed).
+- Why MongoDB (flexible schema, FYP speed, rapid admin analytics logs).
 - Why Expo (iteration speed, OTA optional).
 - Known coupling points (API URL in frontend config).
 
@@ -290,7 +290,7 @@ flowchart LR
 ### 6.4 Known limitations (honesty)
 
 - Simulated or demo driver behaviour if applicable.
-- Wallet as demo / non-production PSP.
+- Fare values are estimates; final fare and booking occur in provider apps.
 - Maps dependency on API keys and quotas.
 
 ### 6.5 Test conclusion
@@ -345,9 +345,9 @@ flowchart LR
 
 ### 8.2 Future work
 
-- Real payment gateway (local PSPs).
-- Production push notifications; deep links.
-- Driver-side app or partner API integrations.
+- Expanded provider deep-link coverage and intent templates.
+- Better confidence modeling for estimated fare ranges.
+- Provider partnerships for richer handoff tracking APIs.
 - Fraud prevention, rate limiting, audit logs.
 - Localization (Urdu/English).
 - Automated tests (Jest, Supertest).

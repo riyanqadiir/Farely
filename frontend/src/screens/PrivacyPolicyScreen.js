@@ -12,18 +12,18 @@ This Privacy Policy describes how Farely (“we”, “us”) handles informatio
 
 • Account data: name, email, phone number, and profile details you provide during signup or profile completion.
 • Location data: when you grant permission, we use device location to show the map, pickup/destination, and route estimates.
-• Usage data: app interactions such as ride searches, bookings, wallet transactions, and notification events stored for in-app history.
+• Usage data: app interactions such as ride searches, provider handoffs, ride confirmations, and notification events stored for in-app history.
 • Device data: basic technical information needed for the app to run (e.g. OS version) where applicable.
 
 2. How we use information
 
-• To provide core features: ride comparison, booking simulation, driver contact, wallet, and notifications.
+• To provide core features: ride comparison, provider handoff, return confirmation, ride history, and notifications.
 • To improve safety and reliability: troubleshooting, fraud prevention in production systems.
 • To communicate with you: OTP, receipts (if enabled), and support responses.
 
 3. Local and demo storage
 
-Some features (e.g. saved cards for demonstration, notification history) may be stored only on your device. In production, payment card data must be tokenized by a certified provider—we do not store full card numbers in this demo.
+Some features (e.g. notification history and pending provider-return confirmations) may be stored on your device to keep experience smooth after app switching.
 
 4. Sharing
 
@@ -51,6 +51,7 @@ We may update this policy. Continued use after changes means you accept the upda
 
 Privacy questions: privacy@farely.app
 Support: support@farely.app
+Rider website: https://farely-web.vercel.app/
 `.trim();
 
 const PrivacyPolicyScreen = ({ navigation }) => (

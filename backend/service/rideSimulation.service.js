@@ -1,7 +1,5 @@
-// In-memory ride simulation (no database).
-// Stores booking data by rideId for the duration of the server process.
-
-const activeBookings = new Map();
+// Aggregator estimation service (no provider API integration).
+// Produces explainable fare estimates using distance and provider coefficients.
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -14,108 +12,80 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-function calcEtaMinutes(distanceKm, avgSpeedKmh = 30) {
+function calcEtaMinutes(distanceKm, avgSpeedKmh = 28) {
   const minutes = (distanceKm / avgSpeedKmh) * 60;
   return Math.max(1, Math.round(minutes));
 }
 
-const PRICING = {
-  // Calibrated so that for a 2km journey:
-  // bike=200, rickshaw=275, car=350 (PKR)
-  bike: { base: 0, perKm: 100 },
-  rickshaw: { base: 0, perKm: 137.5 },
-  car: { base: 0, perKm: 175 },
-  // Premium kept higher for demo realism
-  premium: { base: 0, perKm: 350 },
+const RIDE_TYPE_BASE = {
+  bike: { baseFare: 90, perKmRate: 28 },
+  rickshaw: { baseFare: 120, perKmRate: 34 },
+  car: { baseFare: 150, perKmRate: 40 },
+  /** Car with AC — between car and premium for demo coefficients. */
+  car_ac: { baseFare: 175, perKmRate: 46 },
+  premium: { baseFare: 240, perKmRate: 62 },
 };
 
-function calcPrice(type, distanceKm) {
-  const pricing = PRICING[type] || PRICING.car;
-  return pricing.base + distanceKm * pricing.perKm;
-}
-
-function randomFrom(list) {
-  return list[Math.floor(Math.random() * list.length)];
-}
-
-function randomInt(min, max) {
-  return Math.floor(min + Math.random() * (max - min + 1));
-}
-
-function generateRider() {
-  const firstNames = ['Ali', 'Ahmed', 'Bilal', 'Hassan', 'Ahsan', 'Umer', 'Fahad', 'Usman', 'Zain'];
-  const lastNames = ['Khan', 'Ahmed', 'Hussain', 'Raza', 'Malik', 'Qureshi', 'Siddiqui', 'Sheikh', 'Mughal', 'Chaudhry'];
-
-  const name = `${randomFrom(firstNames)} ${randomFrom(lastNames)}`;
-  const phone = `+92${randomInt(3000000000, 4999999999)}`;
-  const numberPlate = `LE-${randomInt(1000, 9999)}`;
-
-  return { name, phone, numberPlate };
-}
-
-function generateDriver() {
-  const firstNames = ['Omar', 'Saad', 'Hamza', 'Yasir', 'Waqas', 'Asad', 'Irfan', 'Tahir', 'Noman', 'Majid'];
-  const lastNames = ['Khan', 'Butt', 'Malik', 'Qureshi', 'Chaudhry', 'Hussain', 'Raza', 'Sher', 'Abbas'];
-  const vehicles = ['Car', 'Sedan', 'Hatchback', 'SUV'];
-
-  const name = `${randomFrom(firstNames)} ${randomFrom(lastNames)}`;
-  const phone = `+92${randomInt(3000000000, 4999999999)}`;
-  const numberPlate = `DR-${randomInt(1000, 9999)}`;
-  const vehicleType = randomFrom(vehicles);
-
-  return { name, phone, numberPlate, vehicleType };
-}
-
-function randomPointWithinRadiusKm(center, radiusKm) {
-  const bearing = Math.random() * 2 * Math.PI;
-  const distance = Math.random() * radiusKm;
-  const lat = center.latitude;
-  const lon = center.longitude;
-
-  const newLat = lat + (distance / 111.32) * Math.cos(bearing);
-  const newLon = lon + (distance / (111.32 * Math.cos((lat * Math.PI) / 180))) * Math.sin(bearing);
-
-  return { latitude: newLat, longitude: newLon };
-}
-
-const PROVIDER_PRICING = {
-  Careem: { multiplier: 1.0, baseAdd: 0 },
-  Yango: { multiplier: 0.97, baseAdd: 0 },
-  Uber: { multiplier: 1.05, baseAdd: 0 },
+const PROVIDER_CONFIG = {
+  /** Uber: estimates only until Rider API is enabled (no in-app booking). */
+  Uber: { multiplier: 0.98, baseAdd: 12, etaMultiplier: 1.0, confidence: 0.82 },
+  Yango: { multiplier: 0.96, baseAdd: 10, etaMultiplier: 1.0, confidence: 0.8 },
+  /** Bike-first local player; coefficients slightly below car-first apps for bike-like estimates. */
+  Bykea: { multiplier: 0.9, baseAdd: 8, etaMultiplier: 1.05, confidence: 0.68 },
 };
 
-const TICKETS = {
-  Careem: [
-    { tier: 'Standard', multiplier: 1.0, etaMultiplier: 1.05 },
-    { tier: 'Plus', multiplier: 1.12, etaMultiplier: 0.95 },
-  ],
-  Yango: [
-    { tier: 'Standard', multiplier: 0.98, etaMultiplier: 1.0 },
-    { tier: 'Comfort', multiplier: 1.1, etaMultiplier: 0.92 },
-  ],
-  Uber: [
-    { tier: 'Standard', multiplier: 1.0, etaMultiplier: 1.0 },
-    { tier: 'XL', multiplier: 1.25, etaMultiplier: 0.9 },
-  ],
+/** One column per provider: ride-type label only (brand prefix applied when building the name). */
+const PROVIDER_RIDE_LABELS = {
+  Yango: {
+    bike: 'Moto', rickshaw: 'Rickshaw', car: 'Comfort', car_ac: 'Comfort AC', premium: 'Premier',
+  },
+  Uber: {
+    bike: 'Moto', rickshaw: 'Rickshaw', car: 'UberX', car_ac: 'Comfort', premium: 'Premier',
+  },
+  Bykea: {
+    bike: 'Bike', rickshaw: 'Rickshaw', car: 'Car', car_ac: 'Car AC', premium: 'Plus',
+  },
 };
 
-const optionNames = {
-  Careem: { rickshaw: 'Careem Rickshaw', bike: 'Careem Bike', car: 'Careem Go', premium: 'Careem Business' },
-  Yango: { rickshaw: 'Yango Rickshaw', bike: 'Yango Moto', car: 'Yango Comfort', premium: 'Yango Premier' },
-  Uber: { rickshaw: 'Uber Auto', bike: 'Uber Moto', car: 'UberX', premium: 'Uber Black' },
+const PROVIDER_BRAND = {
+  Uber: 'Uber',
+  Yango: 'Yango',
+  Bykea: 'Bykea',
 };
 
-const pricingTypeByRideType = {
-  rickshaw: 'rickshaw',
-  bike: 'bike',
-  car: 'car',
-  premium: 'premium',
-};
+function providerDisplayName(provider, fareModel) {
+  const label = PROVIDER_RIDE_LABELS[provider]?.[fareModel];
+  const brand = PROVIDER_BRAND[provider];
+  if (!label || !brand) return provider;
+  return `${brand} ${label}`;
+}
+
+/**
+ * Maps API rideType + optional car AC flag to a pricing / label bucket.
+ * @param {string} rideType bike | rickshaw | car | premium
+ * @param {boolean} [carAc] when rideType is car, true = with AC
+ */
+function resolveFareModel(rideType, carAc = false) {
+  const r = String(rideType || 'car').trim().toLowerCase();
+  if (r === 'bike') return 'bike';
+  if (r === 'rickshaw') return 'rickshaw';
+  if (r === 'premium') return 'premium';
+  if (r === 'car') return carAc ? 'car_ac' : 'car';
+  return 'car';
+}
 
 /**
  * Minimum fare for route + ride type (no provider markup, no booking side effects).
  */
-function estimateMinFare({ pickupCoords, destinationCoords, rideType }) {
+function computeBaseEstimate(rideType, distanceKm) {
+  const model = RIDE_TYPE_BASE[rideType] || RIDE_TYPE_BASE.car;
+  return {
+    baseFare: Math.max(80, Math.round(model.baseFare + distanceKm * model.perKmRate)),
+    perKmRate: model.perKmRate,
+  };
+}
+
+function estimateMinFare({ pickupCoords, destinationCoords, rideType, carAc }) {
   if (!pickupCoords || !destinationCoords) {
     const err = new Error('Pickup and destination coordinates are required');
     err.statusCode = 400;
@@ -135,127 +105,96 @@ function estimateMinFare({ pickupCoords, destinationCoords, rideType }) {
   }
 
   const distanceKm = haversineKm(lat1, lon1, lat2, lon2);
-  const normalizedRideType = String(rideType || 'car').trim().toLowerCase();
-  const pricingType = pricingTypeByRideType[normalizedRideType] || 'car';
-  const rawBase = calcPrice(pricingType, distanceKm);
-  const baseFare = Math.max(50, Math.round(rawBase));
+  const fareModel = resolveFareModel(rideType, carAc);
+  const base = computeBaseEstimate(fareModel, distanceKm);
 
   return {
-    baseFare,
+    baseFare: base.baseFare,
+    perKmRate: base.perKmRate,
     distanceKm: Number(distanceKm.toFixed(2)),
-    rideType: normalizedRideType,
+    rideType: String(rideType || 'car').trim().toLowerCase(),
+    carAc: fareModel === 'car_ac',
+    fareModel,
+    estimateConfidence: 0.78,
+    pricingModel: 'base_fare_plus_per_km',
   };
 }
 
-function findRides({ pickup, destination, pickupCoords, destinationCoords, rideType }) {
+function findRides({ pickup, destination, pickupCoords, destinationCoords, rideType, carAc }) {
   if (!pickup || !destination) {
     const err = new Error('Please provide pickup and destination');
     err.statusCode = 400;
     throw err;
   }
 
-  const distanceKm = pickupCoords && destinationCoords
-    ? haversineKm(
-      pickupCoords.latitude,
-      pickupCoords.longitude,
-      destinationCoords.latitude,
-      destinationCoords.longitude
-    )
-    : (Math.random() * 10 + 2);
+  if (!pickupCoords || !destinationCoords) {
+    const err = new Error('Pickup and destination coordinates are required for estimates');
+    err.statusCode = 400;
+    throw err;
+  }
 
-  const normalizedRideType = String(rideType || 'car').trim().toLowerCase();
-  const pricingType = pricingTypeByRideType[normalizedRideType] || 'car';
+  const distanceKm = haversineKm(
+    pickupCoords.latitude,
+    pickupCoords.longitude,
+    destinationCoords.latitude,
+    destinationCoords.longitude
+  );
+  const userRideType = String(rideType || 'car').trim().toLowerCase();
+  const fareModel = resolveFareModel(userRideType, carAc);
+  const base = computeBaseEstimate(fareModel, distanceKm);
+  const providers = Object.keys(PROVIDER_CONFIG);
 
-  const rawBase = calcPrice(pricingType, distanceKm);
-  const baseFare = Math.max(50, Math.round(rawBase));
-
-  const baseId = Date.now();
-  const providers = ['Careem', 'Yango', 'Uber'];
-  const catalog = providers.flatMap((provider) => {
-    const tickets = TICKETS[provider] || [{ tier: 'Standard', multiplier: 1.0, etaMultiplier: 1.0 }];
-    const baseName = optionNames[provider]?.[normalizedRideType] || provider;
-    return tickets.map((t, idx) => ({
-      provider,
-      name: `${baseName} ${t.tier}`.trim(),
-      pricingType,
-      id: `${provider.toLowerCase()}_${baseId}_${idx}_${Math.floor(Math.random() * 10000)}`,
-      etaMultiplier: t.etaMultiplier,
-      fareMultiplier: t.multiplier,
-    }));
-  });
-
-  const comparisons = catalog.map((opt) => {
-    const rider = generateRider();
-    const etaMins = calcEtaMinutes(distanceKm * opt.etaMultiplier);
-    const providerPricing = PROVIDER_PRICING[opt.provider] || { multiplier: 1.0, baseAdd: 0 };
-    const basePrice = calcPrice(opt.pricingType, distanceKm);
-    const fare = Math.max(
-      baseFare,
-      Math.round((basePrice + providerPricing.baseAdd) * providerPricing.multiplier * opt.fareMultiplier)
+  const comparisons = providers.map((provider) => {
+    const cfg = PROVIDER_CONFIG[provider];
+    const estimate = Math.max(
+      base.baseFare,
+      Math.round((base.baseFare + cfg.baseAdd) * cfg.multiplier)
     );
-
-    const rideOption = {
-      provider: opt.provider,
-      name: opt.name,
-      fare,
+    const etaMins = calcEtaMinutes(distanceKm * cfg.etaMultiplier);
+    return {
+      id: `${provider.toLowerCase()}_${Date.now()}`,
+      provider,
+      name: providerDisplayName(provider, fareModel),
+      fare: estimate,
       eta: `${etaMins} mins`,
-      rideType: normalizedRideType,
+      rideType: userRideType,
+      carAc: fareModel === 'car_ac',
+      fareModel,
       distanceKm: Number(distanceKm.toFixed(2)),
-      id: opt.id,
-      rider,
+      estimateConfidence: cfg.confidence,
+      pricingBreakdown: {
+        baseFare: base.baseFare,
+        perKmRate: base.perKmRate,
+        providerMultiplier: cfg.multiplier,
+        providerBaseAdd: cfg.baseAdd,
+      },
+      isEstimate: true,
     };
-
-    activeBookings.set(String(opt.id), {
-      rideOption,
-      pickupCoords,
-      destinationCoords,
-      rider,
-      driver: null,
-      driverLocation: null,
-      status: 'Searching',
-      createdAt: Date.now(),
-    });
-
-    return rideOption;
   });
 
   return {
-    baseFare,
+    baseFare: base.baseFare,
+    perKmRate: base.perKmRate,
     distanceKm: Number(distanceKm.toFixed(2)),
-    rideType: normalizedRideType,
+    rideType: userRideType,
+    carAc: fareModel === 'car_ac',
+    fareModel,
+    pricingModel: 'base_fare_plus_per_km_with_provider_coefficients',
+    estimateNotice: 'Final fare and booking confirmation happen inside provider apps.',
     comparisons,
   };
 }
 
 function bookRide(rideId) {
   if (!rideId) {
-    const err = new Error('rideId is required to book');
+    const err = new Error('rideId is required');
     err.statusCode = 400;
     throw err;
   }
-
-  const booking = activeBookings.get(String(rideId));
-  if (!booking) {
-    const err = new Error('Ride not found');
-    err.statusCode = 404;
-    throw err;
-  }
-
-  const driver = booking.driver || generateDriver();
-  const pickupCoords = booking.pickupCoords;
-  const driverLocation = pickupCoords
-    ? randomPointWithinRadiusKm(pickupCoords, 1.5)
-    : randomPointWithinRadiusKm({ latitude: 24.8607, longitude: 67.0011 }, 1.5);
-
-  booking.driver = driver;
-  booking.status = 'Driver Assigned';
-  booking.driverLocation = driverLocation;
-
   return {
     rideId: String(rideId),
-    status: booking.status,
-    driver,
-    driverLocation,
+    status: 'Redirect Pending',
+    message: 'Farely does not book rides directly. Continue in provider app.',
   };
 }
 

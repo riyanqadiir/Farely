@@ -1,5 +1,6 @@
 const User = require("../model/User.model");
 const s3Service = require("../services/s3.service");
+const { emitOutboxEvent } = require("../services/outbox.service");
 const multer = require("multer");
 
 const upload = multer({
@@ -120,8 +121,31 @@ function uploadPhoto(req, res, next) {
   });
 }
 
+/**
+ * POST /profile/heartbeat
+ * Lightweight presence ping when the app becomes active (no sensitive body data).
+ */
+async function heartbeat(req, res, next) {
+  try {
+    const now = new Date();
+    await User.updateOne(
+      { _id: req.userId },
+      { $set: { lastActiveAt: now } }
+    );
+    const uid = String(req.userId);
+    await emitOutboxEvent("user.heartbeat", uid, {
+      userId: uid,
+      at: now.toISOString(),
+    });
+    return res.json({ success: true, lastActiveAt: now.toISOString() });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getProfile,
   updateProfile,
   uploadPhoto,
+  heartbeat,
 };
