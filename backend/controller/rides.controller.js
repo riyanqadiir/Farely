@@ -2,6 +2,7 @@ const rideSimulationService = require("../service/rideSimulation.service");
 const RideSearchLog = require("../model/RideSearchLog.model");
 const ProviderSelectionLog = require("../model/ProviderSelectionLog.model");
 const RideHandoff = require("../model/RideHandoff.model");
+const { emitOutboxEvent } = require("../services/outbox.service");
 
 function parseCarAcFlag(carAc) {
   return carAc === true || carAc === "true" || carAc === 1 || carAc === "1";
@@ -72,6 +73,17 @@ async function compare(req, res, next) {
         eta: item.eta,
         estimateConfidence: item.estimateConfidence,
       })),
+    });
+    await emitOutboxEvent("ride.search.created", searchLog._id, {
+      id: String(searchLog._id),
+      userId: String(req.userId),
+      pickup,
+      destination,
+      pickupCoords,
+      destinationCoords,
+      rideType: data.rideType,
+      carAc: Boolean(data.carAc),
+      createdAt: searchLog.createdAt,
     });
     data.searchLogId = searchLog._id;
     return res.json(data);
@@ -152,6 +164,18 @@ async function logProviderSelection(req, res, next) {
       redirectMode: redirectMode || "unknown",
       failureReason: failureReason || "",
     });
+    await emitOutboxEvent("ride.provider_selection.created", created._id, {
+      id: String(created._id),
+      userId: String(req.userId),
+      searchLogId: created.searchLogId ? String(created.searchLogId) : null,
+      provider: created.provider,
+      rideType: created.rideType,
+      carAc: created.carAc,
+      estimatedFare: created.estimatedFare,
+      redirectAttempted: created.redirectAttempted,
+      redirectSucceeded: created.redirectSucceeded,
+      createdAt: created.createdAt,
+    });
 
     return res.status(201).json({ success: true, id: created._id });
   } catch (err) {
@@ -210,6 +234,21 @@ async function recordRideHandoff(req, res, next) {
       openedUrl: typeof openedUrl === "string" ? openedUrl.slice(0, 2000) : "",
       status: redirectSucceeded ? "handoff_opened" : "handoff_failed",
     });
+    await emitOutboxEvent("ride.handoff.created", doc._id, {
+      id: String(doc._id),
+      userId: String(req.userId),
+      provider: doc.provider,
+      rideType: doc.rideType,
+      pickup: doc.pickup,
+      destination: doc.destination,
+      pickupCoords: doc.pickupCoords || null,
+      destinationCoords: doc.destinationCoords || null,
+      estimatedFare: doc.estimatedFare,
+      status: doc.status,
+      redirectSucceeded: doc.redirectSucceeded,
+      createdAt: doc.createdAt,
+      city: "Lahore",
+    });
 
     return res.status(201).json({ success: true, id: doc._id });
   } catch (err) {
@@ -236,6 +275,22 @@ async function confirmRideHandoff(req, res, next) {
     handoff.userConfirmedAt = new Date();
     handoff.status = taken ? "ride_confirmed" : "ride_not_taken";
     await handoff.save();
+    await emitOutboxEvent(taken ? "ride.handoff.confirmed" : "ride.handoff.rejected", handoff._id, {
+      id: String(handoff._id),
+      userId: String(req.userId),
+      provider: handoff.provider,
+      rideType: handoff.rideType,
+      pickup: handoff.pickup,
+      destination: handoff.destination,
+      pickupCoords: handoff.pickupCoords || null,
+      destinationCoords: handoff.destinationCoords || null,
+      estimatedFare: handoff.estimatedFare,
+      status: handoff.status,
+      redirectSucceeded: handoff.redirectSucceeded,
+      userConfirmedAt: handoff.userConfirmedAt,
+      createdAt: handoff.createdAt,
+      city: "Lahore",
+    });
 
     return res.json({ success: true, id: handoff._id, status: handoff.status });
   } catch (err) {

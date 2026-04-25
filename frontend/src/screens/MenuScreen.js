@@ -114,6 +114,13 @@ const MenuScreen = () => {
         <Section title="Help & legal">
           <View style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
             <MenuRow
+              icon="star"
+              label="Send feedback"
+              subtitle="Rate the app and how Farely helps you"
+              onPress={() => goTo('Feedback', { source: 'menu' })}
+            />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <MenuRow
               icon="comments"
               label="Help & support"
               subtitle="FAQ and contact"

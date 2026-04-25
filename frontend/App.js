@@ -27,6 +27,7 @@ import AccountSettingsScreen from './src/screens/AccountSettingsScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
 import AppSettingsScreen from './src/screens/AppSettingsScreen';
 import HelpSupportScreen from './src/screens/HelpSupportScreen';
+import FeedbackScreen from './src/screens/FeedbackScreen';
 import TermsScreen from './src/screens/TermsScreen';
 import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
 import RideHistoryScreen from './src/screens/RideHistoryScreen';
@@ -155,6 +156,18 @@ const AppNavigator = () => {
     setPendingPrompt(pending);
   };
 
+  useEffect(() => {
+    if (!user) return;
+    const ping = () => {
+      farelyApi.post('/profile/heartbeat').catch(() => null);
+    };
+    ping();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') ping();
+    });
+    return () => sub.remove();
+  }, [user]);
+
   const decidePendingRide = async (taken) => {
     const pending = pendingPrompt;
     if (!pending?.handoffId) return;
@@ -173,13 +186,29 @@ const AppNavigator = () => {
           : `${pending.provider || 'Provider'} ride was marked as not taken.`,
         meta: { handoffId: pending.handoffId },
       });
-      showAppToast({
-        title: taken ? 'Ride saved' : 'Not saved in history',
-        body: taken
-          ? `${pending.provider || 'Provider'} ride added to history.`
-          : `${pending.provider || 'Provider'} ride marked as not taken.`,
-        tone: taken ? 'success' : 'info',
-      });
+      if (taken) {
+        showAppToast({
+          title: 'Ride saved',
+          body: `${pending.provider || 'Provider'} added to history. Share quick feedback?`,
+          tone: 'success',
+          actionLabel: 'Rate experience',
+          onAction: () => {
+            if (navigationRef.isReady()) {
+              navigationRef.navigate('Feedback', {
+                source: 'ride_confirm',
+                handoffId: pending.handoffId,
+                provider: pending.provider || undefined,
+              });
+            }
+          },
+        });
+      } else {
+        showAppToast({
+          title: 'Not saved in history',
+          body: `${pending.provider || 'Provider'} ride marked as not taken.`,
+          tone: 'info',
+        });
+      }
     } catch (_) {
       showAppToast({ title: 'Could not update', body: 'Please try again.', tone: 'error' });
       setPendingPrompt(pending);
@@ -273,6 +302,7 @@ const AppNavigator = () => {
               <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
               <Stack.Screen name="AppSettings" component={AppSettingsScreen} />
               <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+              <Stack.Screen name="Feedback" component={FeedbackScreen} />
               <Stack.Screen name="Terms" component={TermsScreen} />
               <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
               <Stack.Screen name="RideHistory" component={RideHistoryScreen} />

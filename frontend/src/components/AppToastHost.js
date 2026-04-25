@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { registerAppToastListener } from '../utils/appToast';
 
-const HIDE_AFTER_MS = 2200;
+const HIDE_DEFAULT_MS = 2200;
+const HIDE_WITH_ACTION_MS = 9000;
 
 const AppToastHost = () => {
   const { colors } = useTheme();
@@ -20,6 +21,8 @@ const AppToastHost = () => {
         title: next.title || 'Notice',
         body: next.body || '',
         tone: next.tone || 'info',
+        actionLabel: next.actionLabel || null,
+        onAction: typeof next.onAction === 'function' ? next.onAction : null,
       });
     });
     return () => {
@@ -46,6 +49,7 @@ const AppToastHost = () => {
       }),
     ]).start();
 
+    const hideAfter = toast?.onAction && toast?.actionLabel ? HIDE_WITH_ACTION_MS : HIDE_DEFAULT_MS;
     hideTimer.current = setTimeout(() => {
       Animated.parallel([
         Animated.timing(y, {
@@ -60,7 +64,7 @@ const AppToastHost = () => {
           useNativeDriver: true,
         }),
       ]).start(() => setToast(null));
-    }, HIDE_AFTER_MS);
+    }, hideAfter);
   }, [toast, opacity, y]);
 
   if (!toast) return null;
@@ -72,8 +76,9 @@ const AppToastHost = () => {
       : colors.accent;
 
   return (
-    <View pointerEvents="none" style={styles.wrap}>
+    <View pointerEvents="box-none" style={styles.wrap}>
       <Animated.View
+        pointerEvents="auto"
         style={[
           styles.toast,
           {
@@ -88,9 +93,24 @@ const AppToastHost = () => {
           {toast.title}
         </Text>
         {!!toast.body && (
-          <Text style={[styles.body, { color: colors.onAccent }]} numberOfLines={2}>
+          <Text style={[styles.body, { color: colors.onAccent }]} numberOfLines={3}>
             {toast.body}
           </Text>
+        )}
+        {!!toast.actionLabel && toast.onAction && (
+          <TouchableOpacity
+            onPress={() => {
+              if (hideTimer.current) clearTimeout(hideTimer.current);
+              setToast(null);
+              try {
+                toast.onAction();
+              } catch (_) {}
+            }}
+            style={styles.actionBtn}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.actionText, { color: colors.onAccent }]}>{toast.actionLabel}</Text>
+          </TouchableOpacity>
         )}
       </Animated.View>
     </View>
@@ -124,5 +144,14 @@ function createStyles() {
     },
     title: { fontSize: 14, fontWeight: '900' },
     body: { marginTop: 3, fontSize: 12, fontWeight: '600', lineHeight: 16 },
+    actionBtn: {
+      marginTop: 10,
+      alignSelf: 'flex-start',
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 10,
+      backgroundColor: 'rgba(0,0,0,0.12)',
+    },
+    actionText: { fontSize: 13, fontWeight: '900' },
   });
 }
