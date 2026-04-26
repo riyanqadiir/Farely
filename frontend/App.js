@@ -309,6 +309,7 @@ const AppNavigator = () => {
               <Stack.Screen name="RideReview" component={RideReviewScreen} />
               <Stack.Screen name="ForgotPasswordSend" component={ForgotPasswordSendScreen} />
               <Stack.Screen name="VerifyOtp" component={VerifyOtpScreen} />
+              <Stack.Screen name="SetPassword" component={SetPasswordScreen} />
               <Stack.Screen name="ForgotPasswordSetNew" component={ForgotPasswordSetNewScreen} />
             </>
           ) : (

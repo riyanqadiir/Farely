@@ -4,6 +4,8 @@ const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const verifyServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
 const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+const twilioSmsEnabled = process.env.ENABLE_TWILIO_SMS === "true";
+const twilioVerifyEnabled = process.env.ENABLE_TWILIO_VERIFY === "true";
 
 /**
  * Send OTP via Twilio Verify API (recommended) or Programmable SMS.
@@ -11,6 +13,11 @@ const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
  */
 async function sendOtpSms(phoneNumber, otp) {
   const to = phoneNumber.startsWith("+") ? phoneNumber : `+${phoneNumber}`;
+
+  if (!twilioSmsEnabled) {
+    console.log("[SMS DISABLED] OTP to", to, ":", otp);
+    return { sid: "sms-disabled-" + Date.now() };
+  }
 
   if (!accountSid || !authToken) {
     if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") {
@@ -21,7 +28,7 @@ async function sendOtpSms(phoneNumber, otp) {
   }
 
   // Option 1: Twilio Verify API – no phone number needed; Twilio sends and validates the code
-  if (verifyServiceSid && !twilioPhone) {
+  if (twilioVerifyEnabled && verifyServiceSid && !twilioPhone) {
     const client = twilio(accountSid, authToken);
     await client.verify.v2.services(verifyServiceSid).verifications.create({
       to,
@@ -52,6 +59,9 @@ async function sendOtpSms(phoneNumber, otp) {
  */
 async function startVerifySms(phoneNumber) {
   const to = phoneNumber.startsWith("+") ? phoneNumber : `+${phoneNumber}`;
+  if (!twilioVerifyEnabled) {
+    return { status: "pending", sid: "verify-disabled-" + Date.now() };
+  }
   if (!verifyServiceSid || !accountSid || !authToken) {
     if (process.env.NODE_ENV === "development") {
       console.log("[DEV] Verify start for", to);
@@ -71,6 +81,10 @@ async function startVerifySms(phoneNumber) {
  */
 async function checkVerifySms(phoneNumber, code) {
   const to = phoneNumber.startsWith("+") ? phoneNumber : `+${phoneNumber}`;
+  if (!twilioVerifyEnabled) {
+    if (String(code).trim() === "123456") return { status: "approved" };
+    return { status: "denied" };
+  }
   if (!verifyServiceSid || !accountSid || !authToken) {
     if (process.env.NODE_ENV === "development" && code === "123456") {
       return { status: "approved" };

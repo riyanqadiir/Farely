@@ -13,6 +13,8 @@ const googleAudiences = [
   process.env.GOOGLE_WEB_CLIENT_ID,
 ].filter(Boolean);
 const hasGoogleAuth = googleAudiences.length > 0;
+const isTwilioVerifyEnabled = process.env.ENABLE_TWILIO_VERIFY === "true";
+const isPhoneOtpEnabled = process.env.ENABLE_PHONE_OTP === "true";
 
 const PASSWORD_RESET_COOLDOWN_HOURS = 24;
 
@@ -25,6 +27,15 @@ function fullPhone(phone, countryCode) {
   const p = phone.replace(/\D/g, "");
   const cc = (countryCode || "+92").replace(/\D/g, "");
   return (cc ? "+" + cc : "") + p;
+}
+
+function phoneOtpDisabled(channel, res) {
+  if (channel !== "phone" || isPhoneOtpEnabled) return false;
+  res.status(400).json({
+    success: false,
+    message: "Phone OTP is disabled right now. Please use email verification.",
+  });
+  return true;
 }
 
 /**
@@ -64,10 +75,11 @@ async function signup(req, res, next) {
       });
     }
 
-    const channel = req.body.otpChannel || "phone";
-    const identifier = channel === "email" ? emailNorm : phoneNorm;
+    const channel = "email";
+    const identifier = emailNorm;
     const useTwilioVerify =
       channel === "phone" &&
+      isTwilioVerifyEnabled &&
       process.env.TWILIO_VERIFY_SERVICE_SID &&
       !process.env.TWILIO_PHONE_NUMBER;
 
@@ -119,9 +131,11 @@ async function signup(req, res, next) {
 async function resendOtp(req, res, next) {
   try {
     const { identifier, channel, purpose } = req.body;
+    if (phoneOtpDisabled(channel, res)) return;
     const normalizedId = normalizeIdentifier(identifier, channel);
     const useTwilioVerify =
       channel === "phone" &&
+      isTwilioVerifyEnabled &&
       process.env.TWILIO_VERIFY_SERVICE_SID &&
       !process.env.TWILIO_PHONE_NUMBER;
 
@@ -172,9 +186,10 @@ async function resendOtp(req, res, next) {
 async function verifyOtp(req, res, next) {
   try {
     const { identifier, channel, purpose, otp } = req.body;
+    if (phoneOtpDisabled(channel, res)) return;
     const normalizedId = normalizeIdentifier(identifier, channel);
 
-    if (channel === "phone" && process.env.TWILIO_VERIFY_SERVICE_SID) {
+    if (channel === "phone" && isTwilioVerifyEnabled && process.env.TWILIO_VERIFY_SERVICE_SID) {
       const OtpVerification = require("../model/OtpVerification.model");
       const record = await OtpVerification.findOne({
         identifier: normalizedId,
@@ -231,6 +246,7 @@ async function verifyOtp(req, res, next) {
 async function setPassword(req, res, next) {
   try {
     const { identifier, channel, password } = req.body;
+    if (phoneOtpDisabled(channel, res)) return;
     const normalizedId = normalizeIdentifier(identifier, channel);
 
     const otpRecord = await OtpVerification.findOne({
@@ -363,6 +379,7 @@ async function googleAuth(req, res, next) {
 async function forgotPassword(req, res, next) {
   try {
     const { channel, identifier } = req.body;
+    if (phoneOtpDisabled(channel, res)) return;
     const normalizedId = normalizeIdentifier(identifier, channel);
 
     const user = await User.findOne(
@@ -389,6 +406,7 @@ async function forgotPassword(req, res, next) {
 
     const useTwilioVerify =
       channel === "phone" &&
+      isTwilioVerifyEnabled &&
       process.env.TWILIO_VERIFY_SERVICE_SID &&
       !process.env.TWILIO_PHONE_NUMBER;
 
@@ -455,6 +473,7 @@ const RESET_PASSWORD_VERIFIED_WINDOW_MINUTES = 15;
 async function resetPassword(req, res, next) {
   try {
     const { identifier, channel, otp, password } = req.body;
+    if (phoneOtpDisabled(channel, res)) return;
     const normalizedId = normalizeIdentifier(identifier, channel);
 
     if (otp) {

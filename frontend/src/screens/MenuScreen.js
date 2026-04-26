@@ -2,18 +2,10 @@ import React, { useContext, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
-import { navigationRef } from '../navigation/rootNavigation';
 import { AuthContext } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 
-/** Root stack lives on NavigationContainer; local `navigation` from Menu can miss sibling routes on some builds. */
-function goTo(name, params) {
-  if (navigationRef.isReady()) {
-    navigationRef.navigate(name, params);
-  }
-}
-
-const MenuScreen = () => {
+const MenuScreen = ({ navigation }) => {
   const { logout } = useContext(AuthContext);
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(), []);
@@ -48,7 +40,14 @@ const MenuScreen = () => {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top', 'bottom']}>
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => goTo('Main', { screen: 'Rides' })} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() =>
+            navigation.canGoBack()
+              ? navigation.goBack()
+              : navigation.navigate('Main', { screen: 'Rides' })
+          }
+          style={styles.backBtn}
+        >
           <FontAwesome6 name="chevron-left" size={14} color={colors.accent} solid />
           <Text style={[styles.backText, { color: colors.accent }]}>Back</Text>
         </TouchableOpacity>
@@ -67,14 +66,14 @@ const MenuScreen = () => {
               icon="user"
               label="Profile"
               subtitle="Name, photo, city & address"
-              onPress={() => goTo('MenuProfile')}
+              onPress={() => navigation.push('MenuProfile', { fromMenu: true })}
             />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="shield"
               label="Account & security"
               subtitle="Password and sign-in"
-              onPress={() => goTo('AccountSettings')}
+              onPress={() => navigation.push('AccountSettings')}
             />
           </View>
         </Section>
@@ -85,28 +84,28 @@ const MenuScreen = () => {
               icon="bell"
               label="Notifications"
               subtitle="Ride and product updates"
-              onPress={() => goTo('Notification')}
+              onPress={() => navigation.push('Notification')}
             />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="sliders"
               label="App settings"
               subtitle="Appearance, email receipts, toggles"
-              onPress={() => goTo('AppSettings')}
+              onPress={() => navigation.push('AppSettings')}
             />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="clock-rotate-left"
               label="Ride history"
               subtitle="Confirmed rides after provider return"
-              onPress={() => goTo('RideHistory')}
+              onPress={() => navigation.push('RideHistory')}
             />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="clipboard-check"
               label="Pending ride reviews"
               subtitle="Confirm rides you skipped for later"
-              onPress={() => goTo('RideReview')}
+              onPress={() => navigation.push('RideReview')}
             />
           </View>
         </Section>
@@ -117,34 +116,34 @@ const MenuScreen = () => {
               icon="star"
               label="Send feedback"
               subtitle="Rate the app and how Farely helps you"
-              onPress={() => goTo('Feedback', { source: 'menu' })}
+              onPress={() => navigation.push('Feedback', { source: 'menu' })}
             />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="comments"
               label="Help & support"
               subtitle="FAQ and contact"
-              onPress={() => goTo('HelpSupport')}
+              onPress={() => navigation.push('HelpSupport')}
             />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="circle-info"
               label="About Farely"
               subtitle="Version and product summary"
-              onPress={() => goTo('About')}
+              onPress={() => navigation.push('About')}
             />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="file-lines"
               label="Terms of service"
-              onPress={() => goTo('Terms')}
+              onPress={() => navigation.push('Terms')}
             />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <MenuRow
               icon="lock"
               label="Privacy policy"
               subtitle="How we use your data"
-              onPress={() => goTo('PrivacyPolicy')}
+              onPress={() => navigation.push('PrivacyPolicy')}
             />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <TouchableOpacity style={styles.logoutRow} onPress={handleLogout} activeOpacity={0.85}>

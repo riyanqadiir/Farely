@@ -151,40 +151,42 @@ const NotificationScreen = ({ navigation }) => {
 
 export default NotificationScreen;
 
-const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  container: { flex: 1 },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  backBtnText: { fontWeight: '800' },
-  headerTitle: { flex: 1, textAlign: 'center', fontWeight: '900', fontSize: 18 },
-  scrollContent: { padding: 16, paddingBottom: 28 },
-  section: { marginBottom: 18 },
-  sectionTitle: { fontSize: 14, fontWeight: '900', marginBottom: 10 },
-  card: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-  },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
-  iconBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { fontSize: 14, fontWeight: '900' },
-  cardBody: { fontSize: 12, lineHeight: 18, marginBottom: 8, fontWeight: '600' },
-  cardTime: { fontSize: 11, fontWeight: '700' },
-});
+function createStyles() {
+  return StyleSheet.create({
+    safe: { flex: 1 },
+    container: { flex: 1 },
+    header: {
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      paddingBottom: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: '#e5e7eb',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    backBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    backBtnText: { fontWeight: '800' },
+    headerTitle: { flex: 1, textAlign: 'center', fontWeight: '900', fontSize: 18 },
+    scrollContent: { padding: 16, paddingBottom: 28 },
+    section: { marginBottom: 18 },
+    sectionTitle: { fontSize: 14, fontWeight: '900', marginBottom: 10 },
+    card: {
+      borderWidth: 1,
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 10,
+    },
+    cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
+    iconBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    cardTitle: { fontSize: 14, fontWeight: '900' },
+    cardBody: { fontSize: 12, lineHeight: 18, marginBottom: 8, fontWeight: '600' },
+    cardTime: { fontSize: 11, fontWeight: '700' },
+  });
+}
 

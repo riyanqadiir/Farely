@@ -19,7 +19,7 @@ const SetPasswordScreen = ({ route, navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { authApi, loadUser } = useContext(AuthContext);
+  const { authApi, loadUser, pendingProfileComplete } = useContext(AuthContext);
 
   const handleSetPassword = async () => {
     const p = password.trim();
@@ -37,6 +37,14 @@ const SetPasswordScreen = ({ route, navigation }) => {
       });
       await AsyncStorage.setItem('token', res.data.token);
       await loadUser();
+      const targetRoute = pendingProfileComplete ? 'CompleteProfile' : 'Main';
+      navigation.reset({
+        index: 0,
+        routes:
+          targetRoute === 'Main'
+            ? [{ name: 'Main', params: { screen: 'Rides' } }]
+            : [{ name: 'CompleteProfile' }],
+      });
     } catch (err) {
       alert(err.response?.data?.message || 'Could not set password.');
     } finally {

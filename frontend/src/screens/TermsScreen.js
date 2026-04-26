@@ -25,7 +25,7 @@ You may not misuse the App, attempt unauthorized access, reverse engineer except
 The App is provided “as is.” To the maximum extent permitted by law, Farely and its operators are not liable for indirect or consequential damages arising from use of the App.
 
 7. Contact
-For questions about these terms, contact support@farely.app.
+For questions about these terms, contact farely.support@gmail.com.
 `.trim();
 
 const TermsScreen = ({ navigation }) => (

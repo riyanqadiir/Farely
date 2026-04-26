@@ -28,7 +28,7 @@ const FAQ = [
   },
   {
     q: 'Who do I contact for a lost item?',
-    a: 'Email support@farely.app with your trip time, pickup and drop-off, and a description of the item. We will coordinate with the driver when possible.',
+    a: 'Email farely.support@gmail.com with your trip time, pickup and drop-off, and a description of the item. We will coordinate with the driver when possible.',
   },
 ];
 
@@ -70,7 +70,7 @@ const HelpSupportScreen = ({ navigation }) => {
       setTicketBody('');
       showAppToast({
         title: 'Request sent',
-        body: 'Our team can see this in Support Inbox. You can still email support@farely.app if you prefer.',
+        body: 'Our team can see this in Support Inbox. You can still email farely.support@gmail.com if you prefer.',
         tone: 'success',
       });
     } catch (e) {
@@ -103,13 +103,13 @@ const HelpSupportScreen = ({ navigation }) => {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <TouchableOpacity
             style={styles.contactCard}
-            onPress={() => Linking.openURL('mailto:support@farely.app?subject=Farely%20support')}
+            onPress={() => Linking.openURL('mailto:farely.support@gmail.com?subject=Farely%20support')}
             activeOpacity={0.85}
           >
             <FontAwesome6 name="envelope" size={18} color="#2563eb" solid />
             <View style={{ flex: 1 }}>
               <Text style={styles.contactTitle}>Email us</Text>
-              <Text style={styles.contactSub}>support@farely.app</Text>
+              <Text style={styles.contactSub}>farely.support@gmail.com</Text>
             </View>
             <FontAwesome6 name="chevron-right" size={12} color="#94a3b8" solid />
           </TouchableOpacity>

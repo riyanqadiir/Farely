@@ -49,8 +49,7 @@ We may update this policy. Continued use after changes means you accept the upda
 
 9. Contact
 
-Privacy questions: privacy@farely.app
-Support: support@farely.app
+Privacy questions and support: farely.support@gmail.com
 Rider website: https://farely-web.vercel.app/
 `.trim();
 

@@ -4,6 +4,39 @@ const ProviderSelectionLog = require("../model/ProviderSelectionLog.model");
 const RideHandoff = require("../model/RideHandoff.model");
 const { emitOutboxEvent } = require("../services/outbox.service");
 
+const SERVICE_AREA = {
+  // Pakistan bounding box (coarse service area guardrail).
+  minLat: 23.5,
+  maxLat: 37.2,
+  minLng: 60.8,
+  maxLng: 77.9,
+};
+// Approximate Pakistan polygon (clockwise). Used after bbox check to avoid accepting nearby foreign points.
+const PAKISTAN_POLYGON = [
+  { latitude: 24.0, longitude: 61.0 },
+  { latitude: 25.3, longitude: 61.2 },
+  { latitude: 26.5, longitude: 61.5 },
+  { latitude: 28.0, longitude: 62.0 },
+  { latitude: 29.5, longitude: 62.0 },
+  { latitude: 31.0, longitude: 63.0 },
+  { latitude: 32.5, longitude: 63.8 },
+  { latitude: 34.0, longitude: 65.2 },
+  { latitude: 35.5, longitude: 66.8 },
+  { latitude: 36.8, longitude: 69.5 },
+  { latitude: 36.7, longitude: 72.0 },
+  { latitude: 35.3, longitude: 73.8 },
+  { latitude: 34.0, longitude: 74.9 },
+  { latitude: 31.2, longitude: 74.6 },
+  { latitude: 29.0, longitude: 71.8 },
+  { latitude: 27.5, longitude: 69.5 },
+  { latitude: 25.8, longitude: 67.8 },
+  { latitude: 24.8, longitude: 66.6 },
+  { latitude: 24.2, longitude: 64.5 },
+  { latitude: 24.0, longitude: 61.0 },
+];
+const MIN_TRIP_KM = 0.3;
+const MAX_TRIP_KM = 250;
+
 function parseCarAcFlag(carAc) {
   return carAc === true || carAc === "true" || carAc === 1 || carAc === "1";
 }
@@ -12,6 +45,94 @@ function parseCarAcFlag(carAc) {
 function effectiveCarAc(rideType, carAcFlag) {
   const rt = String(rideType || "car").trim().toLowerCase();
   return rt === "car" && Boolean(carAcFlag);
+}
+
+function toFiniteNumber(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+    * Math.sin(dLon / 2) ** 2;
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function inServiceArea({ latitude, longitude }) {
+  const inBbox = (
+    latitude >= SERVICE_AREA.minLat
+    && latitude <= SERVICE_AREA.maxLat
+    && longitude >= SERVICE_AREA.minLng
+    && longitude <= SERVICE_AREA.maxLng
+  );
+  if (!inBbox) return false;
+
+  // Ray-casting point-in-polygon test.
+  let inside = false;
+  for (let i = 0, j = PAKISTAN_POLYGON.length - 1; i < PAKISTAN_POLYGON.length; j = i++) {
+    const yi = PAKISTAN_POLYGON[i].latitude;
+    const xi = PAKISTAN_POLYGON[i].longitude;
+    const yj = PAKISTAN_POLYGON[j].latitude;
+    const xj = PAKISTAN_POLYGON[j].longitude;
+    const intersect =
+      yi > latitude !== yj > latitude
+      && longitude < ((xj - xi) * (latitude - yi)) / (yj - yi || Number.EPSILON) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function parseAndValidateCoords({ pickupLat, pickupLng, destinationLat, destinationLng }) {
+  const pLat = toFiniteNumber(pickupLat);
+  const pLng = toFiniteNumber(pickupLng);
+  const dLat = toFiniteNumber(destinationLat);
+  const dLng = toFiniteNumber(destinationLng);
+
+  if (pLat == null || pLng == null || dLat == null || dLng == null) {
+    const err = new Error("Pickup and destination coordinates are required.");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (
+    pLat < -90 || pLat > 90 || dLat < -90 || dLat > 90
+    || pLng < -180 || pLng > 180 || dLng < -180 || dLng > 180
+  ) {
+    const err = new Error("Invalid map coordinates. Please select valid locations.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const pickupCoords = { latitude: pLat, longitude: pLng };
+  const destinationCoords = { latitude: dLat, longitude: dLng };
+
+  if (!inServiceArea(pickupCoords) || !inServiceArea(destinationCoords)) {
+    const err = new Error("This route is outside our current service area (Pakistan).");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const distanceKm = haversineKm(pLat, pLng, dLat, dLng);
+  if (distanceKm < MIN_TRIP_KM) {
+    const err = new Error("Pickup and destination are too close. Please choose a longer route.");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (distanceKm > MAX_TRIP_KM) {
+    const err = new Error("Route is too long for in-city ride comparison. Please choose a shorter trip.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return { pickupCoords, destinationCoords };
 }
 
 async function compare(req, res, next) {
@@ -37,14 +158,12 @@ async function compare(req, res, next) {
       return res.json(data);
     }
 
-    const pickupCoords =
-      typeof pickupLat === "number" && typeof pickupLng === "number"
-        ? { latitude: pickupLat, longitude: pickupLng }
-        : null;
-    const destinationCoords =
-      typeof destinationLat === "number" && typeof destinationLng === "number"
-        ? { latitude: destinationLat, longitude: destinationLng }
-        : null;
+    const { pickupCoords, destinationCoords } = parseAndValidateCoords({
+      pickupLat,
+      pickupLng,
+      destinationLat,
+      destinationLng,
+    });
 
     const data = rideSimulationService.findRides({
       pickup,
@@ -108,14 +227,12 @@ async function estimateMin(req, res, next) {
 
     const carAcEffective = effectiveCarAc(rideType, parseCarAcFlag(carAc));
 
-    const pickupCoords =
-      typeof pickupLat === 'number' && typeof pickupLng === 'number'
-        ? { latitude: pickupLat, longitude: pickupLng }
-        : null;
-    const destinationCoords =
-      typeof destinationLat === 'number' && typeof destinationLng === 'number'
-        ? { latitude: destinationLat, longitude: destinationLng }
-        : null;
+    const { pickupCoords, destinationCoords } = parseAndValidateCoords({
+      pickupLat,
+      pickupLng,
+      destinationLat,
+      destinationLng,
+    });
 
     const data = rideSimulationService.estimateMinFare({
       pickupCoords,
