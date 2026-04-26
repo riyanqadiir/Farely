@@ -84,12 +84,11 @@ const SignupScreen = ({ navigation }) => {
         email: emailNorm,
         phone: phoneNorm,
         countryCode: selectedCountry.dialCode || '+92',
-        otpChannel: 'phone',
+        otpChannel: 'email',
       });
       const { data } = res;
-      const channel = data.channel || 'phone';
-      const identifier =
-        data.identifier ?? (channel === 'email' ? emailNorm : fullPhone(phoneNorm, selectedCountry.dialCode));
+      const channel = data.channel || 'email';
+      const identifier = data.identifier ?? emailNorm;
       navigation.navigate('VerifyOtp', {
         identifier,
         channel,
@@ -125,7 +124,7 @@ const SignupScreen = ({ navigation }) => {
         </TouchableOpacity>
 
         <Text style={styles.headline}>Create your account</Text>
-        <Text style={styles.subhead}>We’ll send a code to verify your mobile number.</Text>
+        <Text style={styles.subhead}>We’ll send a code to verify your email.</Text>
 
         <View style={styles.card}>
           <Text style={styles.label}>Full name</Text>

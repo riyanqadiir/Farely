@@ -29,6 +29,57 @@ const RIDE_TYPE_OPTIONS = [
   { id: 'car', kind: 'fa', icon: 'car', a11y: 'Car' },
 ];
 const RIDE_TYPE_ICON_SIZE = 22;
+const PAKISTAN_BOUNDS = {
+  minLat: 23.5,
+  maxLat: 37.2,
+  minLng: 60.8,
+  maxLng: 77.9,
+};
+
+const PAKISTAN_POLYGON = [
+  { latitude: 24.0, longitude: 61.0 },
+  { latitude: 25.3, longitude: 61.2 },
+  { latitude: 26.5, longitude: 61.5 },
+  { latitude: 28.0, longitude: 62.0 },
+  { latitude: 29.5, longitude: 62.0 },
+  { latitude: 31.0, longitude: 63.0 },
+  { latitude: 32.5, longitude: 63.8 },
+  { latitude: 34.0, longitude: 65.2 },
+  { latitude: 35.5, longitude: 66.8 },
+  { latitude: 36.8, longitude: 69.5 },
+  { latitude: 36.7, longitude: 72.0 },
+  { latitude: 35.3, longitude: 73.8 },
+  { latitude: 34.0, longitude: 74.9 },
+  { latitude: 31.2, longitude: 74.6 },
+  { latitude: 29.0, longitude: 71.8 },
+  { latitude: 27.5, longitude: 69.5 },
+  { latitude: 25.8, longitude: 67.8 },
+  { latitude: 24.8, longitude: 66.6 },
+  { latitude: 24.2, longitude: 64.5 },
+  { latitude: 24.0, longitude: 61.0 },
+];
+
+function isInPakistan(latitude, longitude) {
+  const inBounds =
+    latitude >= PAKISTAN_BOUNDS.minLat
+    && latitude <= PAKISTAN_BOUNDS.maxLat
+    && longitude >= PAKISTAN_BOUNDS.minLng
+    && longitude <= PAKISTAN_BOUNDS.maxLng;
+  if (!inBounds) return false;
+
+  let inside = false;
+  for (let i = 0, j = PAKISTAN_POLYGON.length - 1; i < PAKISTAN_POLYGON.length; j = i++) {
+    const yi = PAKISTAN_POLYGON[i].latitude;
+    const xi = PAKISTAN_POLYGON[i].longitude;
+    const yj = PAKISTAN_POLYGON[j].latitude;
+    const xj = PAKISTAN_POLYGON[j].longitude;
+    const intersect =
+      yi > latitude !== yj > latitude
+      && longitude < ((xj - xi) * (latitude - yi)) / (yj - yi || Number.EPSILON) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
 
 const HomeScreen = ({ navigation, route }) => {
   const { colors: themeColors } = useTheme();
@@ -439,6 +490,14 @@ const HomeScreen = ({ navigation, route }) => {
     // Support both {latitude, longitude} and [{latitude, longitude}] shapes.
     const first = Array.isArray(coordsObj) ? coordsObj[0] : coordsObj;
     if (!first || typeof first.latitude !== 'number' || typeof first.longitude !== 'number') return;
+    if (!isInPakistan(first.latitude, first.longitude)) {
+      showAppToast({
+        title: 'Outside service area',
+        body: 'Please select pickup and destination within Pakistan.',
+        tone: 'error',
+      });
+      return;
+    }
 
     await setAddressFromCoords({ latitude: first.latitude, longitude: first.longitude }, selectionMode);
   };
@@ -491,7 +550,7 @@ const HomeScreen = ({ navigation, route }) => {
         destinationCoords,
       });
     } catch (err) {
-      alert('Failed to get ride options');
+      alert(err.response?.data?.msg || err.response?.data?.message || 'Failed to get ride options');
     } finally {
       setLoading(false);
     }

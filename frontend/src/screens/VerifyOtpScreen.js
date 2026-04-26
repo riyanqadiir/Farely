@@ -63,7 +63,15 @@ const VerifyOtpScreen = ({ route, navigation }) => {
       if (purpose === 'forgot_password') {
         navigation.navigate('ForgotPasswordSetNew', { identifier, channel });
       } else {
-        navigation.navigate('SetPassword', { identifier, channel });
+        const routeNames = navigation.getState?.()?.routeNames || [];
+        if (routeNames.includes('SetPassword')) {
+          navigation.navigate('SetPassword', { identifier, channel });
+        } else {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'CompleteProfile' }],
+          });
+        }
       }
     } catch (err) {
       alert(err.response?.data?.message || 'Invalid or expired code.');
@@ -91,7 +99,7 @@ const VerifyOtpScreen = ({ route, navigation }) => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backArrow}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Phone verification.</Text>
+        <Text style={styles.title}>{channel === 'email' ? 'Email verification.' : 'Phone verification.'}</Text>
         <Text style={styles.subtitle}>Enter your OTP code.</Text>
 
         <View style={styles.otpRow}>

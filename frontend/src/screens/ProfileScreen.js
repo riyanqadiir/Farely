@@ -126,7 +126,10 @@ const ProfileScreen = ({ navigation, route }) => {
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       {openedFromMenu && (
         <View style={styles.inlineHeader}>
-          <TouchableOpacity onPress={() => navigation.navigate('Menu')} style={styles.inlineBackBtn}>
+          <TouchableOpacity
+            onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Menu'))}
+            style={styles.inlineBackBtn}
+          >
             <Text style={styles.inlineBackText}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.inlineHeaderTitle}>Profile settings</Text>

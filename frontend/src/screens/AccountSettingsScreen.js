@@ -21,7 +21,7 @@ const AccountSettingsScreen = ({ navigation }) => {
   const { user } = useContext(AuthContext);
   const email = user?.email || '—';
   const phone = user?.phone || user?.loginId || '—';
-  const openMenuProfile = () => navigation.navigate('MenuProfile');
+  const openMenuProfile = () => navigation.push('MenuProfile', { fromMenu: true });
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -58,7 +58,7 @@ const AccountSettingsScreen = ({ navigation }) => {
             icon="key"
             label="Change password"
             subtitle="Current password and new password"
-            onPress={() => navigation.navigate('ChangePassword')}
+            onPress={() => navigation.push('ChangePassword')}
           />
         </View>
 
