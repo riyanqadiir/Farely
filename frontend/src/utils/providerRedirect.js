@@ -194,23 +194,6 @@ function useYangoAppmetricaRedirect() {
   return String(flag || '').toLowerCase() === 'true' || flag === '1';
 }
 
-/**
- * Uber: prefer universal link + custom scheme (no Android intent://).
- * Full booking will move to Rider API once OAuth scopes are approved.
- */
-function buildUberDeepLinkCandidates(pickup, dropoff, handoff) {
-  const plat = pickup.latitude;
-  const plon = pickup.longitude;
-  const dlat = dropoff.latitude;
-  const dlon = dropoff.longitude;
-  const list = [
-    `https://m.uber.com/ul/?action=setPickup&pickup[latitude]=${plat}&pickup[longitude]=${plon}&dropoff[latitude]=${dlat}&dropoff[longitude]=${dlon}`,
-    `uber://?action=setPickup&pickup[latitude]=${plat}&pickup[longitude]=${plon}&dropoff[latitude]=${dlat}&dropoff[longitude]=${dlon}`,
-    `geo:${dlat},${dlon}?q=${encodeURIComponent(`${dlat},${dlon}`)}`,
-  ];
-  return mapUrlsWithProviderHandoff(list, handoff, 'generic');
-}
-
 /** Google Play package for Bykea (Pakistan). */
 const BYKEA_ANDROID_PACKAGE = 'com.bykea.pk';
 
@@ -321,13 +304,6 @@ function buildBykeaDeepLinkCandidates(pickup, dropoff, handoff) {
 
 
 const PROVIDER_LINKS = {
-  Uber: {
-    deepLinkCandidates: ({ pickup, dropoff, handoff }) => buildUberDeepLinkCandidates(pickup, dropoff, handoff),
-    appPresenceScheme: 'uber://',
-    fallback: Platform.OS === 'android'
-      ? 'https://play.google.com/store/apps/details?id=com.ubercab'
-      : 'https://apps.apple.com/app/uber/id368677368',
-  },
   Yango: {
     deepLinkCandidates: ({ pickup, dropoff, handoff }) => {
       const pickupStr = toIntentCoords(pickup);

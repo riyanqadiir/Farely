@@ -81,7 +81,7 @@ const RideHistoryScreen = ({ navigation }) => {
             <View style={styles.emptyWrap}>
               <Text style={[styles.emptyTitle, { color: colors.text }]}>No confirmed rides yet</Text>
               <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
-                When you return from Uber, Yango, or Bykea and confirm a ride, it appears here.
+                When you return from Yango or Bykea and confirm a ride, it appears here.
               </Text>
             </View>
           }

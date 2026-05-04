@@ -17,10 +17,25 @@ import { redirectToProvider } from '../utils/providerRedirect';
 import { useTheme } from '../theme/ThemeContext';
 import { setPendingRideConfirmation } from '../utils/rideConfirmation';
 import { showAppToast } from '../utils/appToast';
+import { subscribeToUiData, syncCaptureHandoffToNative } from '../native/accessibilityBridge';
+import { applyYangoBykeaMinSpread } from '../utils/yangoBykeaFareSpread';
+
+const normalizeProvider = (value) => {
+  const v = String(value || '').trim().toLowerCase();
+  if (!v) return '';
+  if (v.includes('yango') || v.includes('yandex')) return 'Yango';
+  if (v.includes('bykea') || v.includes('bykia')) return 'Bykea';
+  if (v.includes('indrive') || v.includes('in drive') || v.includes('in-drive')) return 'InDrive';
+  return String(value || '').trim();
+};
+
+const isPakistanCompareProvider = (name) => {
+  const p = normalizeProvider(name).toLowerCase();
+  return p === 'yango' || p === 'bykea';
+};
 
 /** After a successful deep link, show pickup/drop digits for known providers. */
 const MANUAL_COORDS_ALERT_TITLE_BY_PROVIDER = {
-  Uber: 'Uber opened',
   Yango: 'Yango opened',
   Bykea: 'Bykea opened',
 };
@@ -40,7 +55,11 @@ function RideOptionCard({ item, bookingLoadingId, onOpenApp, colors, styles }) {
           {typeof item.distanceKm === 'number' ? `${item.distanceKm} km` : '—'}
         </Text>
         <Text style={[styles.riderMeta, { color: colors.textMuted }]}>
-          Estimate confidence: {Math.round((item.estimateConfidence || 0) * 100)}%
+          {item.fareSource === 'live_capture'
+            ? 'Live fare captured from provider app'
+            : item.fareSource === 'scraped_blend'
+              ? 'Estimate blended with scraped Yango / Bykea fare'
+              : `Estimate confidence: ${Math.round((item.estimateConfidence || 0) * 100)}%`}
         </Text>
       </View>
 
@@ -81,6 +100,7 @@ const RideOptionsScreen = ({ navigation, route }) => {
   const pickupCoords = route?.params?.pickupCoords;
   const destinationCoords = route?.params?.destinationCoords;
   const initialCarAc = Boolean(route?.params?.carAc);
+  const compareCalibrated = Boolean(route?.params?.compareCalibrated);
 
   const [rideType] = useState(initialRideType);
   const [carAc] = useState(initialCarAc);
@@ -88,6 +108,9 @@ const RideOptionsScreen = ({ navigation, route }) => {
   const [fares, setFares] = useState(incomingFares);
   const [bookingLoadingId, setBookingLoadingId] = useState(null);
   const [bookingStatus, setBookingStatus] = useState('');
+  const [capturedFareText, setCapturedFareText] = useState('');
+  const [capturedProvider, setCapturedProvider] = useState('');
+  const [capturedFare, setCapturedFare] = useState(null);
   const [bykeaConfirmOption, setBykeaConfirmOption] = useState(null);
 
   const mountedRef = useRef(true);
@@ -99,8 +122,42 @@ const RideOptionsScreen = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
-    setFares(incomingFares);
+    syncCaptureHandoffToNative(rideType, rideType === 'car' ? carAc : false);
+  }, [rideType, carAc]);
+
+  useEffect(() => {
+    const list = Array.isArray(incomingFares) ? incomingFares : [];
+    const filtered = list.filter((item) => isPakistanCompareProvider(item?.provider));
+    setFares(applyYangoBykeaMinSpread(filtered));
   }, [incomingFares]);
+
+  useEffect(() => {
+    const sub = subscribeToUiData((data) => {
+      const provider = normalizeProvider(data?.provider);
+      const fare = typeof data?.fare === 'number' ? data.fare : Number(data?.fare);
+      const rawText = typeof data?.rawText === 'string' ? data.rawText.trim() : '';
+      if (!provider || !isPakistanCompareProvider(provider) || !Number.isFinite(fare) || fare <= 0) return;
+
+      setCapturedProvider(provider);
+      setCapturedFare(fare);
+      setCapturedFareText(rawText || `${provider} PKR ${Math.round(fare)}`);
+
+      setFares((prev) => {
+        const next = (Array.isArray(prev) ? prev : []).map((item) => {
+          if (normalizeProvider(item?.provider).toLowerCase() !== provider.toLowerCase()) return item;
+          return {
+            ...item,
+            fare,
+            estimateConfidence: 1,
+            fareSource: 'live_capture',
+          };
+        });
+        return applyYangoBykeaMinSpread(next);
+      });
+    });
+
+    return () => sub?.remove?.();
+  }, []);
 
   const sortedFares = useMemo(() => {
     const list = Array.isArray(fares) ? [...fares] : [];
@@ -157,6 +214,7 @@ const RideOptionsScreen = ({ navigation, route }) => {
     setBookingLoadingId(id);
     setBookingStatus('Opening provider app...');
     try {
+      syncCaptureHandoffToNative(rideType, rideType === 'car' ? carAc : false);
       const redirect = await redirectToProvider(
         rideOption.provider,
         pickupCoords,
@@ -276,11 +334,17 @@ const RideOptionsScreen = ({ navigation, route }) => {
               {!!bookingStatus && (
                 <Text style={[styles.bookingStatus, { color: colors.success }]}>{bookingStatus}</Text>
               )}
+              {!!capturedFareText && (
+                <Text style={[styles.liveFareStatus, { color: colors.accent }]}>
+                  Live fare capture ({capturedProvider || 'provider'}):
+                  {` PKR ${capturedFare ? Math.round(capturedFare) : '—'} · ${capturedFareText}`}
+                </Text>
+              )}
               <Text style={[styles.meta, { color: colors.textMuted }]}>
                 Type: {rideTypeSummary} • Sort: {sortBy}
               </Text>
               <Text style={[styles.meta, { color: colors.textMuted }]}>
-                Estimates only — booking and final fare are set in Uber, Yango, or Bykea.
+                Estimates only — booking and final fare are set in Yango or Bykea.
               </Text>
               {typeof routeBaseFare === 'number' && Number.isFinite(routeBaseFare) && (
                 <View style={[styles.baseFareBanner, { backgroundColor: colors.chipInactive, borderColor: colors.border }]}>
@@ -294,6 +358,11 @@ const RideOptionsScreen = ({ navigation, route }) => {
                   <Text style={[styles.baseFareHint, { color: colors.textMuted }]}>
                     Listed prices are this amount or higher.
                   </Text>
+                  {compareCalibrated ? (
+                    <Text style={[styles.baseFareHint, { color: colors.textMuted, marginTop: 6 }]}>
+                      Minimum includes calibration from saved Yango / Bykea prices for this route.
+                    </Text>
+                  ) : null}
                 </View>
               )}
             </View>
@@ -316,7 +385,8 @@ const RideOptionsScreen = ({ navigation, route }) => {
           <View style={[styles.infoBanner, { borderColor: colors.border, backgroundColor: colors.chipInactive }]}>
             <Text style={[styles.infoBannerTitle, { color: colors.textMuted }]}>Aggregator</Text>
             <Text style={[styles.meta, { color: colors.textSecondary, marginTop: 4 }]}>
-              Farely does not process payments. Complete checkout only inside the provider you open.
+              Farely does not process payments. Open Yango or Bykea only when you choose — one app at a time.
+              Live fares update when you return after viewing the estimate screen.
             </Text>
           </View>
         </View>
@@ -425,6 +495,7 @@ function createStyles() {
     title: { fontSize: 22, fontWeight: '800' },
     subtitle: { marginTop: 6, fontSize: 12 },
     bookingStatus: { marginTop: 8, fontSize: 12, fontWeight: '700' },
+    liveFareStatus: { marginTop: 6, fontSize: 12, fontWeight: '800' },
     meta: { marginTop: 8, fontSize: 12, fontWeight: '600' },
     baseFareBanner: {
       marginTop: 12,

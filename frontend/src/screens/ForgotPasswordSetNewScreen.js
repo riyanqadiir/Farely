@@ -21,22 +21,6 @@ const ForgotPasswordSetNewScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(false);
   const { authApi, loadUser } = useContext(AuthContext);
 
-  const handleSetupLater = () => {
-    const routeNames = navigation.getState?.()?.routeNames || [];
-    if (routeNames.includes('Main')) {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Main', params: { screen: 'Rides' } }],
-      });
-      return;
-    }
-    // Unauthenticated stack fallback: return to app entry/welcome instead of login.
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Welcome' }],
-    });
-  };
-
   const handleSave = async () => {
     const p = password.trim();
     const cp = confirmPassword.trim();
@@ -87,9 +71,6 @@ const ForgotPasswordSetNewScreen = ({ route, navigation }) => {
           autoCapitalize="none"
         />
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.secondaryAction} onPress={handleSetupLater}>
-            <Text style={styles.secondaryActionText}>Set up later...</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={styles.eyeToggle} onPress={() => setShowPassword((s) => !s)}>
             <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
           </TouchableOpacity>
@@ -124,13 +105,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     marginBottom: spacing.sm,
   },
-  secondaryAction: { paddingVertical: 2 },
-  secondaryActionText: { color: colors.gray500, fontSize: 14 },
   eyeToggle: { alignSelf: 'auto' },
   eyeText: { color: '#2563EB', fontSize: 14 },
   hint: { fontSize: 13, color: colors.gray500, marginBottom: spacing.xl },

@@ -21,6 +21,7 @@ const AppToastHost = () => {
         title: next.title || 'Notice',
         body: next.body || '',
         tone: next.tone || 'info',
+        durationMs: typeof next.durationMs === 'number' && next.durationMs > 0 ? next.durationMs : null,
         actionLabel: next.actionLabel || null,
         onAction: typeof next.onAction === 'function' ? next.onAction : null,
       });
@@ -49,7 +50,11 @@ const AppToastHost = () => {
       }),
     ]).start();
 
-    const hideAfter = toast?.onAction && toast?.actionLabel ? HIDE_WITH_ACTION_MS : HIDE_DEFAULT_MS;
+    const customMs =
+      typeof toast?.durationMs === 'number' && toast.durationMs > 0 ? toast.durationMs : null;
+    const hideAfter =
+      customMs
+      ?? (toast?.onAction && toast?.actionLabel ? HIDE_WITH_ACTION_MS : HIDE_DEFAULT_MS);
     hideTimer.current = setTimeout(() => {
       Animated.parallel([
         Animated.timing(y, {

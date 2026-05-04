@@ -57,7 +57,7 @@ const MenuScreen = ({ navigation }) => {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text style={[styles.intro, { color: colors.textSecondary }]}>
-          Farely compares Uber, Yango, and Bykea side by side. Book and pay only inside the provider you choose.
+          Farely compares Yango and Bykea side by side. Book and pay only inside the provider you choose.
         </Text>
 
         <Section title="Account">

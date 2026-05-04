@@ -25,7 +25,7 @@ const SLIDES = [
   {
     id: '1',
     headline: 'Anywhere you are',
-    description: 'Compare ride fares and ETAs across Uber, Yango, and Bykea — in one place.',
+    description: 'Compare ride fares and ETAs across Yango and Bykea — in one place.',
     Illustration: Slide1Illustration,
   },
   {

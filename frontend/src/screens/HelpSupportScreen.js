@@ -24,7 +24,7 @@ const FAQ = [
   },
   {
     q: 'How do I pay?',
-    a: 'Farely does not collect fares. After you open Uber, Yango, or Bykea, payment and checkout happen only inside that provider’s app.',
+    a: 'Farely does not collect fares. After you open Yango or Bykea, payment and checkout happen only inside that provider’s app.',
   },
   {
     q: 'Who do I contact for a lost item?',

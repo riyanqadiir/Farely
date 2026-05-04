@@ -20,6 +20,23 @@ import { pushAppNotification } from '../utils/notifications';
 import { useTheme } from '../theme/ThemeContext';
 import { createHomeStyles } from './homeThemeStyles';
 import { showAppToast } from '../utils/appToast';
+import { subscribeToUiData, syncCaptureHandoffToNative } from '../native/accessibilityBridge';
+import {
+  buildCaptureStorageKey,
+  buildRouteFareKey,
+  getCapturedFaresForContext,
+  saveCapturedFare,
+} from '../utils/liveFareStore';
+import { applyYangoBykeaMinSpread } from '../utils/yangoBykeaFareSpread';
+
+const normalizeProvider = (value) => {
+  const v = String(value || '').trim().toLowerCase();
+  if (!v) return '';
+  if (v.includes('yango') || v.includes('yandex')) return 'Yango';
+  if (v.includes('bykea') || v.includes('bykia')) return 'Bykea';
+  if (v.includes('indrive') || v.includes('in drive') || v.includes('in-drive')) return 'InDrive';
+  return String(value || '').trim();
+};
 
 const TUK_TUK_PNG = require('../../assets/images/ride-types/tuktuk.png');
 
@@ -108,6 +125,7 @@ const HomeScreen = ({ navigation, route }) => {
   const [compareDistanceKm, setCompareDistanceKm] = useState(null);
   const [rideOverlayOpen, setRideOverlayOpen] = useState(false);
   const [bookingLoadingId, setBookingLoadingId] = useState(null);
+  const [minFareCalibrated, setMinFareCalibrated] = useState(false);
   // Keep map mounted; avoid remounting (expo-maps can freeze on remount).
   const driverMoveIntervalRef = useRef(null);
   const driverArriveTimeoutRef = useRef(null);
@@ -213,6 +231,10 @@ const HomeScreen = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
+    syncCaptureHandoffToNative(rideType, rideType === 'car' ? carWithAc : false);
+  }, [rideType, carWithAc]);
+
+  useEffect(() => {
     const booked = route?.params?.booked;
     if (!booked) return;
 
@@ -248,6 +270,18 @@ const HomeScreen = ({ navigation, route }) => {
     navigation.setParams({ locationSelection: undefined });
   }, [navigation, route?.params?.locationSelection]);
 
+  useEffect(() => {
+    const sub = subscribeToUiData(async (data) => {
+      const provider = normalizeProvider(data?.provider);
+      const fare = typeof data?.fare === 'number' ? data.fare : Number(data?.fare);
+      const rawText = typeof data?.rawText === 'string' ? data.rawText.trim() : '';
+      const key = buildCaptureStorageKey(pickupCoords, destinationCoords, rideType, carWithAc);
+      if (!key || !provider || !Number.isFinite(fare) || fare <= 0) return;
+      await saveCapturedFare(key, provider, fare, rawText);
+    });
+    return () => sub?.remove?.();
+  }, [pickupCoords, destinationCoords, rideType, carWithAc]);
+
   // Recompute minimum fare when ride type, car AC option, or endpoints change.
   useEffect(() => {
     const hasEndpoints =
@@ -261,12 +295,28 @@ const HomeScreen = ({ navigation, route }) => {
     if (!hasEndpoints) {
       setBaseFareEstimate(null);
       setCompareDistanceKm(null);
+      setMinFareCalibrated(false);
       return;
     }
 
     let cancelled = false;
     (async () => {
       try {
+        const captured = await getCapturedFaresForContext(
+          pickupCoords,
+          destinationCoords,
+          rideType,
+          carWithAc
+        );
+        const liveCalibration = captured
+          .map((c) => ({ provider: normalizeProvider(c?.provider), fare: Number(c?.fare) }))
+          .filter(
+            (c) =>
+              (c.provider === 'Yango' || c.provider === 'Bykea')
+              && Number.isFinite(c.fare)
+              && c.fare > 0
+          );
+
         const res = await farelyApi.post('/rides/estimate-min', {
           pickupLat: pickupCoords.latitude,
           pickupLng: pickupCoords.longitude,
@@ -274,6 +324,7 @@ const HomeScreen = ({ navigation, route }) => {
           destinationLng: destinationCoords.longitude,
           rideType,
           carAc: rideType === 'car' ? carWithAc : false,
+          ...(liveCalibration.length ? { liveCalibration } : {}),
         });
         if (cancelled) return;
         const d = res.data || {};
@@ -283,10 +334,12 @@ const HomeScreen = ({ navigation, route }) => {
         if (typeof d.distanceKm === 'number' && Number.isFinite(d.distanceKm)) {
           setCompareDistanceKm(d.distanceKm);
         }
+        setMinFareCalibrated(Boolean(d.calibratedFromScrapes));
       } catch (_) {
         if (!cancelled) {
           setBaseFareEstimate(null);
           setCompareDistanceKm(null);
+          setMinFareCalibrated(false);
         }
       }
     })();
@@ -510,17 +563,77 @@ const HomeScreen = ({ navigation, route }) => {
     setLoading(true);
     setBookingStatus('');
     try {
+      const routeFareKey = buildRouteFareKey(pickupCoords, destinationCoords);
+      const captured = await getCapturedFaresForContext(
+        pickupCoords,
+        destinationCoords,
+        rideType,
+        carWithAc
+      );
+      const liveCalibration = captured
+        .map((c) => ({ provider: normalizeProvider(c?.provider), fare: Number(c?.fare) }))
+        .filter(
+          (c) =>
+            (c.provider === 'Yango' || c.provider === 'Bykea')
+            && Number.isFinite(c.fare)
+            && c.fare > 0
+        );
+
       const payload = { pickup, destination, rideType, carAc: rideType === 'car' ? carWithAc : false };
       payload.pickupLat = pickupCoords.latitude;
       payload.pickupLng = pickupCoords.longitude;
       payload.destinationLat = destinationCoords.latitude;
       payload.destinationLng = destinationCoords.longitude;
+      if (liveCalibration.length) {
+        payload.liveCalibration = liveCalibration;
+      }
 
       const res = await farelyApi.post('/rides/compare', payload);
       const raw = res.data;
+      const baseFareEarly = Array.isArray(raw) ? null : raw?.baseFare;
+      const distKmEarly = Array.isArray(raw) ? null : raw?.distanceKm;
       const list = Array.isArray(raw) ? raw : raw?.comparisons || [];
-      const baseFare = Array.isArray(raw) ? null : raw?.baseFare;
-      const distKm = Array.isArray(raw) ? null : raw?.distanceKm;
+      const mergedFromApi = list.map((item) => {
+        const itemProvider = normalizeProvider(item?.provider);
+        const match = captured.find(
+          (it) => normalizeProvider(it.provider).toLowerCase() === itemProvider.toLowerCase()
+        );
+        if (!match || !Number.isFinite(match.fare)) return item;
+        return {
+          ...item,
+          fare: match.fare,
+          estimateConfidence: 1,
+          fareSource: 'live_capture',
+        };
+      });
+      const seenProviders = new Set(
+        mergedFromApi.map((item) => normalizeProvider(item?.provider).toLowerCase()).filter(Boolean)
+      );
+      const merged = [...mergedFromApi];
+      for (const cap of captured) {
+        const p = normalizeProvider(cap.provider);
+        if (p !== 'Yango' && p !== 'Bykea') continue;
+        if (!Number.isFinite(cap.fare) || cap.fare <= 0) continue;
+        const key = p.toLowerCase();
+        if (seenProviders.has(key)) continue;
+        seenProviders.add(key);
+        merged.push({
+          id: `live_capture_${key}_${routeFareKey.replace(/[^a-z0-9]+/gi, '_').slice(0, 32)}`,
+          provider: p,
+          name: `${p} (live)`,
+          fare: cap.fare,
+          eta: '—',
+          rideType,
+          carAc: rideType === 'car' ? carWithAc : false,
+          distanceKm: typeof distKmEarly === 'number' ? distKmEarly : undefined,
+          estimateConfidence: 1,
+          fareSource: 'live_capture',
+          isEstimate: false,
+        });
+      }
+      const mergedSpread = applyYangoBykeaMinSpread(merged);
+      const baseFare = baseFareEarly;
+      const distKm = distKmEarly;
       if (typeof baseFare === 'number' && Number.isFinite(baseFare)) {
         setBaseFareEstimate(baseFare);
       } else {
@@ -531,23 +644,26 @@ const HomeScreen = ({ navigation, route }) => {
       } else {
         setCompareDistanceKm(null);
       }
+      setMinFareCalibrated(Boolean(raw?.calibratedFromScrapes));
       pushAppNotification({
         type: 'ride',
         title: 'Ride options updated',
-        body: `${list.length} ride option${list.length === 1 ? '' : 's'} found for your route.`,
-        meta: { pickup, destination, count: list.length },
+        body: `${mergedSpread.length} ride option${mergedSpread.length === 1 ? '' : 's'} found for your route.`,
+        meta: { pickup, destination, count: mergedSpread.length },
       });
       navigation.navigate('RideOptions', {
         pickup,
         destination,
         rideType,
         carAc: rideType === 'car' ? carWithAc : false,
-        fares: list,
+        fares: mergedSpread,
         baseFare: typeof baseFare === 'number' ? baseFare : undefined,
         distanceKm: typeof distKm === 'number' ? distKm : undefined,
         searchLogId: Array.isArray(raw) ? undefined : raw?.searchLogId,
         pickupCoords,
         destinationCoords,
+        capturedLiveFares: captured,
+        compareCalibrated: Boolean(raw?.calibratedFromScrapes),
       });
     } catch (err) {
       alert(err.response?.data?.msg || err.response?.data?.message || 'Failed to get ride options');
@@ -870,10 +986,15 @@ const HomeScreen = ({ navigation, route }) => {
                   {typeof compareDistanceKm === 'number' ? ` · ${compareDistanceKm} km` : ''}
                 </Text>
                 <Text style={styles.baseFareHint}>Provider fares are this amount or higher.</Text>
+                {minFareCalibrated ? (
+                  <Text style={[styles.baseFareHint, { marginTop: 6 }]}>
+                    Tuned using saved Yango / Bykea prices for this route (see Compare fares for rows).
+                  </Text>
+                ) : null}
               </View>
             )}
             <TouchableOpacity style={styles.compareBtn} onPress={handleCompare} disabled={loading}>
-              {loading ? <ActivityIndicator size="small" color={themeColors.onAccent} /> : <Text style={styles.compareBtnText}>Compare estimates</Text>}
+              {loading ? <ActivityIndicator size="small" color={themeColors.onAccent} /> : <Text style={styles.compareBtnText}>Compare fares</Text>}
             </TouchableOpacity>
       <Text style={styles.disclaimer}>* Farely only provides estimates. Booking and final fare happen in provider apps.</Text>
         </>

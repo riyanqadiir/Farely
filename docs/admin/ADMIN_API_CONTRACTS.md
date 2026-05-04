@@ -128,7 +128,7 @@ Response:
     ],
     "providerBreakdown": [
       {
-        "provider": "Uber",
+        "provider": "Yango",
         "searches": 560,
         "handoffAttempts": 430,
         "confirmedRides": 301,

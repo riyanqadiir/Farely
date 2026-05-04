@@ -151,6 +151,8 @@ const AppNavigator = () => {
 
   const confirmPendingRide = async () => {
     if (pendingPrompt?.handoffId) return;
+    const token = await AsyncStorage.getItem('token');
+    if (!token) return;
     const pending = await getPendingRideConfirmation();
     if (!pending?.handoffId) return;
     setPendingPrompt(pending);
@@ -167,6 +169,18 @@ const AppNavigator = () => {
     });
     return () => sub.remove();
   }, [user]);
+
+  /** Do not surface ride-review UI while logged out (stale AsyncStorage survives reinstall in dev / token cleared). */
+  useEffect(() => {
+    if (loading) return;
+    if (!user) setPendingPrompt(null);
+  }, [user, loading]);
+
+  /** After login, re-check persisted pending handoff prompt. */
+  useEffect(() => {
+    if (loading || !user) return;
+    void confirmPendingRide();
+  }, [loading, user]);
 
   const decidePendingRide = async (taken) => {
     const pending = pendingPrompt;
@@ -217,7 +231,9 @@ const AppNavigator = () => {
 
   useEffect(() => {
 
-    const handleUrl = (url) => {
+    const handleUrl = async (url) => {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
       const payload = parseProviderReturnUrl(url);
       if (!payload) return;
       if (payload.returnedPrice) {
@@ -239,11 +255,11 @@ const AppNavigator = () => {
     };
 
     Linking.getInitialURL().then((url) => {
-      if (url) handleUrl(url);
+      if (url) void handleUrl(url);
     }).catch(() => null);
 
     const sub = Linking.addEventListener('url', (event) => {
-      if (event?.url) handleUrl(event.url);
+      if (event?.url) void handleUrl(event.url);
     });
 
     const appStateSub = AppState.addEventListener('change', (nextState) => {
@@ -330,7 +346,7 @@ const AppNavigator = () => {
         <RideWidget navigationRef={navigationRef} />
         <AppToastHost />
         <RideConfirmModal
-          pending={pendingPrompt}
+          pending={user ? pendingPrompt : null}
           colors={colors}
           onLater={() => {
             if (pendingPrompt?.provider) {
@@ -403,13 +419,23 @@ function RideConfirmModal({ pending, colors, onLater, onNo, onYes }) {
   );
 }
 
+/** Reads auth and passes primitives into RideWidgetProvider so widget context keeps stable hook order. */
+function RideWidgetAuthBridge({ children }) {
+  const { user, loading } = useContext(AuthContext);
+  return (
+    <RideWidgetProvider authUser={user} authLoading={loading}>
+      {children}
+    </RideWidgetProvider>
+  );
+}
+
 export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <RideWidgetProvider>
+        <RideWidgetAuthBridge>
           <AppNavigator />
-        </RideWidgetProvider>
+        </RideWidgetAuthBridge>
       </AuthProvider>
     </ThemeProvider>
   );

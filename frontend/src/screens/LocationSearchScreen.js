@@ -13,6 +13,7 @@ import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import Constants from 'expo-constants';
 import { CommonActions } from '@react-navigation/native';
 import farelyApi from '../api/farelyApi';
+import { getCapturedFaresForContext } from '../utils/liveFareStore';
 
 const RECENT_PLACES = [
   { id: 'r1', name: 'Office', detail: 'House 45, Block C, Model Town, Lahore', km: '2.7km' },
@@ -139,6 +140,17 @@ const LocationSearchScreen = ({ navigation, route }) => {
       try {
         setEstimateLoading(true);
         setEstimateError('');
+        const captured = await getCapturedFaresForContext(
+          from,
+          to,
+          rideType,
+          rideType === 'car' ? carAc : false
+        );
+        const liveCalibration = captured
+          .filter((c) => /yango|bykea/i.test(String(c?.provider || '')))
+          .map((c) => ({ provider: String(c.provider), fare: Number(c.fare) }))
+          .filter((c) => Number.isFinite(c.fare) && c.fare > 0);
+
         const res = await farelyApi.post('/rides/estimate-min', {
           pickupLat: from.latitude,
           pickupLng: from.longitude,
@@ -146,6 +158,7 @@ const LocationSearchScreen = ({ navigation, route }) => {
           destinationLng: to.longitude,
           rideType,
           carAc: rideType === 'car' ? carAc : false,
+          ...(liveCalibration.length ? { liveCalibration } : {}),
         });
         if (reqId !== estimateReqId.current) return;
         setMinEstimate(res.data || null);
@@ -372,6 +385,11 @@ const LocationSearchScreen = ({ navigation, route }) => {
                     {rideType === 'car' ? `${rideType}${carAc ? ', with AC' : ', no AC'}` : rideType}
                     ). Provider fares are this or higher.
                   </Text>
+                  {minEstimate.calibratedFromScrapes ? (
+                    <Text style={[styles.minFareHint, { marginTop: 6 }]}>
+                      Includes calibration from saved Yango / Bykea prices for this route.
+                    </Text>
+                  ) : null}
                 </>
               ) : (
                 <Text style={styles.minFareErr}>{estimateError}</Text>
