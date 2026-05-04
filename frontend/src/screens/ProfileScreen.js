@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5e1',
     alignItems: 'center',
   },
-  inlineBackText: { color: '#2563eb', fontWeight: '800', fontSize: 12 },
+  inlineBackText: { color: colors.primary, fontWeight: '800', fontSize: 12 },
   inlineHeaderTitle: { fontSize: 16, fontWeight: '900', color: '#0f172a' },
   title: { fontSize: 20, fontWeight: '600', color: colors.gray900, marginBottom: spacing.xl },
   avatarContainer: {

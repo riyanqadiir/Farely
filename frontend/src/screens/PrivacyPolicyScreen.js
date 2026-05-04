@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+import { colors } from '../constants/theme';
 
 const BODY = `
 Last updated: April 2026
@@ -57,7 +58,7 @@ const PrivacyPolicyScreen = ({ navigation }) => (
   <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
     <View style={styles.header}>
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-        <FontAwesome6 name="chevron-left" size={14} color="#2563eb" solid />
+        <FontAwesome6 name="chevron-left" size={14} color={colors.primary} solid />
         <Text style={styles.backText}>Back</Text>
       </TouchableOpacity>
       <Text style={styles.title}>Privacy policy</Text>
@@ -84,7 +85,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 88 },
-  backText: { color: '#2563eb', fontWeight: '800', fontSize: 12 },
+  backText: { color: colors.primary, fontWeight: '800', fontSize: 12 },
   title: { fontSize: 16, fontWeight: '900', color: '#0f172a', flex: 1, textAlign: 'center' },
   scroll: { padding: 16, paddingBottom: 40 },
   body: { fontSize: 14, color: '#334155', lineHeight: 22, fontWeight: '600' },

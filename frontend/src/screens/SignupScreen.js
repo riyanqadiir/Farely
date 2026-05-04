@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.gray100,
   },
   pickerItemName: { fontSize: 16, color: colors.gray900 },
-  pickerItemCode: { fontSize: 15, color: colors.gray600 },
+  pickerItemCode: { fontSize: 15, color: colors.gray500 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: {
     backgroundColor: '#fff',

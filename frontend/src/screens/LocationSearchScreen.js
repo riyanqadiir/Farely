@@ -14,6 +14,7 @@ import Constants from 'expo-constants';
 import { CommonActions } from '@react-navigation/native';
 import farelyApi from '../api/farelyApi';
 import { getCapturedFaresForContext } from '../utils/liveFareStore';
+import { colors } from '../constants/theme';
 
 const RECENT_PLACES = [
   { id: 'r1', name: 'Office', detail: 'House 45, Block C, Model Town, Lahore', km: '2.7km' },
@@ -282,7 +283,7 @@ const LocationSearchScreen = ({ navigation, route }) => {
             onPress={() => setActiveField('from')}
             activeOpacity={0.85}
           >
-            <FontAwesome6 name="location-crosshairs" size={13} color="#10b981" solid />
+            <FontAwesome6 name="location-crosshairs" size={13} color={colors.primary} solid />
             <TextInput
               style={styles.input}
               value={fromPlace.label}
@@ -316,14 +317,14 @@ const LocationSearchScreen = ({ navigation, route }) => {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.currentLocBtn} onPress={useCurrentLocationForFrom} disabled={!currentLocation}>
-            <FontAwesome6 name="location-arrow" size={12} color="#10b981" solid />
+            <FontAwesome6 name="location-arrow" size={12} color={colors.primary} solid />
             <Text style={styles.currentLocText}>Current location</Text>
           </TouchableOpacity>
 
           <Text style={styles.sectionTitle}>{suggestionsTitle}</Text>
           {loading ? (
             <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" color="#2563eb" />
+              <ActivityIndicator size="small" color={colors.primary} />
             </View>
           ) : (
             <FlatList
@@ -340,7 +341,7 @@ const LocationSearchScreen = ({ navigation, route }) => {
                       <Text style={styles.suggestionTitle}>{item.title}</Text>
                       {!!item.subtitle && <Text style={styles.suggestionSubtitle}>{item.subtitle}</Text>}
                     </View>
-                    {loadingItem ? <ActivityIndicator size="small" color="#2563eb" /> : null}
+                    {loadingItem ? <ActivityIndicator size="small" color={colors.primary} /> : null}
                   </TouchableOpacity>
                 );
               }}
@@ -371,7 +372,7 @@ const LocationSearchScreen = ({ navigation, route }) => {
               <Text style={styles.minFareLabel}>Minimum base fare (estimate)</Text>
               {estimateLoading ? (
                 <View style={styles.minFareLoadingRow}>
-                  <ActivityIndicator size="small" color="#2563eb" />
+                  <ActivityIndicator size="small" color={colors.primary} />
                   <Text style={styles.minFareLoadingText}>Calculating…</Text>
                 </View>
               ) : minEstimate ? (
@@ -447,7 +448,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 10,
   },
-  inputActive: { borderColor: '#14b8a6', backgroundColor: '#ecfeff' },
+  inputActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   input: { flex: 1, color: '#111827', fontWeight: '600' },
   currentLocBtn: {
     marginBottom: 10,
@@ -456,7 +457,7 @@ const styles = StyleSheet.create({
     gap: 8,
     alignSelf: 'flex-start',
   },
-  currentLocText: { color: '#0f766e', fontWeight: '700', fontSize: 12 },
+  currentLocText: { color: colors.primaryDark, fontWeight: '700', fontSize: 12 },
   sectionTitle: { color: '#374151', fontSize: 13, fontWeight: '700', marginBottom: 8 },
   list: { maxHeight: 160, marginBottom: 8 },
   loadingRow: { height: 90, alignItems: 'center', justifyContent: 'center' },
@@ -505,7 +506,7 @@ const styles = StyleSheet.create({
   minFareErr: { marginTop: 4, fontSize: 11, color: '#dc2626', fontWeight: '600' },
   confirmBtn: {
     marginTop: 12,
-    backgroundColor: '#3b82f6',
+    backgroundColor: colors.primary,
     borderRadius: 10,
     paddingVertical: 13,
     alignItems: 'center',

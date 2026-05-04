@@ -1,6 +1,9 @@
+/** Align with `theme/themeTokens` accent (home / RideOptions primary actions). */
 export const colors = {
-  primary: '#2563eb',
-  primaryDark: '#1d4ed8',
+  primary: '#9ecb3c',
+  primaryDark: '#7aa52a',
+  /** Selected chips / soft fills paired with primary */
+  primarySoft: 'rgba(158, 203, 60, 0.16)',
   white: '#ffffff',
   black: '#000000',
   gray100: '#f3f4f6',

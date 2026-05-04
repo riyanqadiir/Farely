@@ -2,13 +2,14 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+import { colors } from '../constants/theme';
 
 const AboutScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <FontAwesome6 name="chevron-left" size={14} color="#2563eb" solid />
+          <FontAwesome6 name="chevron-left" size={14} color={colors.primary} solid />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>About</Text>
@@ -20,8 +21,8 @@ const AboutScreen = ({ navigation }) => {
           <Text style={styles.appName}>Farely</Text>
           <Text style={styles.version}>Version 1.0.0</Text>
           <Text style={styles.body}>
-            Farely is a ride-hailing simulation app for comparing fares, booking rides, tracking driver status, wallet
-            top-ups, and in-app notifications — built for demos and academic projects (e.g. FYP).
+            Farely is a ride-hailing simulation app for comparing fares, booking rides, tracking driver status, and
+            in-app notifications — built for demos and academic projects (e.g. FYP).
           </Text>
         </View>
 
@@ -56,7 +57,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 64 },
-  backText: { color: '#2563eb', fontWeight: '800', fontSize: 12 },
+  backText: { color: colors.primary, fontWeight: '800', fontSize: 12 },
   title: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
   card: {
     borderWidth: 1,

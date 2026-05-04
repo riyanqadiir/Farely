@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { AuthContext } from '../context/AuthContext';
+import { colors } from '../constants/theme';
 
 const Row = ({ icon, label, subtitle, onPress }) => (
   <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.85}>
@@ -27,7 +28,7 @@ const AccountSettingsScreen = ({ navigation }) => {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <FontAwesome6 name="chevron-left" size={14} color="#2563eb" solid />
+          <FontAwesome6 name="chevron-left" size={14} color={colors.primary} solid />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Account & security</Text>
@@ -87,7 +88,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 88 },
-  backText: { color: '#2563eb', fontWeight: '800', fontSize: 12 },
+  backText: { color: colors.primary, fontWeight: '800', fontSize: 12 },
   title: { fontSize: 17, fontWeight: '900', color: '#0f172a' },
   scroll: { padding: 16, paddingBottom: 32 },
   section: {

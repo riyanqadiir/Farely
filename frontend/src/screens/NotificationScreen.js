@@ -11,7 +11,7 @@ const FALLBACK_ITEMS = [
   {
     id: 'seed-1',
     title: 'Welcome to Farely',
-    body: 'Ride updates, driver status and wallet transactions will appear here.',
+    body: 'Ride updates and driver status will appear here.',
     createdAt: new Date().toISOString(),
   },
 ];

@@ -16,6 +16,7 @@ import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import farelyApi from '../api/farelyApi';
 import { AuthContext } from '../context/AuthContext';
 import { showAppToast } from '../utils/appToast';
+import { colors } from '../constants/theme';
 
 const FAQ = [
   {
@@ -93,7 +94,7 @@ const HelpSupportScreen = ({ navigation }) => {
       >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <FontAwesome6 name="chevron-left" size={14} color="#2563eb" solid />
+            <FontAwesome6 name="chevron-left" size={14} color={colors.primary} solid />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Help & support</Text>
@@ -106,7 +107,7 @@ const HelpSupportScreen = ({ navigation }) => {
             onPress={() => Linking.openURL('mailto:farely.support@gmail.com?subject=Farely%20support')}
             activeOpacity={0.85}
           >
-            <FontAwesome6 name="envelope" size={18} color="#2563eb" solid />
+            <FontAwesome6 name="envelope" size={18} color={colors.primary} solid />
             <View style={{ flex: 1 }}>
               <Text style={styles.contactTitle}>Email us</Text>
               <Text style={styles.contactSub}>farely.support@gmail.com</Text>
@@ -191,7 +192,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 88 },
-  backText: { color: '#2563eb', fontWeight: '800', fontSize: 12 },
+  backText: { color: colors.primary, fontWeight: '800', fontSize: 12 },
   title: { fontSize: 17, fontWeight: '900', color: '#0f172a' },
   scroll: { padding: 16, paddingBottom: 32 },
   contactCard: {
@@ -206,7 +207,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   contactTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
-  contactSub: { fontSize: 13, color: '#2563eb', fontWeight: '700', marginTop: 2 },
+  contactSub: { fontSize: 13, color: colors.primary, fontWeight: '700', marginTop: 2 },
   inlineForm: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -230,7 +231,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sendBtn: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

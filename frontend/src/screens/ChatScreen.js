@@ -6,6 +6,7 @@ import { pushAppNotification } from '../utils/notifications';
 import { openPhoneDialer } from '../utils/phoneDialer';
 import { useRideWidget } from '../context/RideWidgetContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { colors } from '../constants/theme';
 
 const WAIT_MS = 5 * 60 * 1000;
 
@@ -217,7 +218,7 @@ const styles = StyleSheet.create({
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { fontWeight: '900', fontSize: 15, color: '#0f172a' },
   headerSub: { marginTop: 2, fontSize: 12, color: '#64748b', fontWeight: '600' },
-  payPill: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: '#2563eb' },
+  payPill: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: colors.primary },
   payPillText: { color: '#fff', fontWeight: '900', fontSize: 12 },
 
   mainBody: { flex: 1, paddingHorizontal: 14, paddingTop: 12, alignItems: 'center' },
@@ -247,7 +248,7 @@ const styles = StyleSheet.create({
   actionsRow: { marginTop: 14, flexDirection: 'row', gap: 10 },
   whatsAppBtn: {
     flex: 1,
-    backgroundColor: '#16a34a',
+    backgroundColor: '#25D366',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
@@ -258,7 +259,7 @@ const styles = StyleSheet.create({
   whatsAppBtnText: { color: '#fff', fontWeight: '900' },
   callBtn: {
     width: 110,
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',

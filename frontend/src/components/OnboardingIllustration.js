@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import { colors } from '../constants/theme';
 
-const PRIMARY = '#2563eb';
+const PRIMARY = colors.primary;
 
 /**
  * Placeholder illustrations for onboarding slides.

@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   eyeToggle: { alignSelf: 'auto' },
-  eyeText: { color: '#2563EB', fontSize: 14 },
+  eyeText: { color: colors.primary, fontSize: 14 },
   hint: { fontSize: 13, color: colors.gray500, marginBottom: spacing.xl },
   primaryButton: {
     backgroundColor: colors.primary,
