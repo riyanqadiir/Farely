@@ -1,8 +1,6 @@
 import React, { useState, useContext } from 'react';
 import {
-  View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -10,7 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import PasswordInput from '../components/PasswordInput';
 import { colors, spacing } from '../constants/theme';
 
 const ForgotPasswordSetNewScreen = ({ route, navigation }) => {
@@ -19,7 +17,14 @@ const ForgotPasswordSetNewScreen = ({ route, navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { authApi, loadUser } = useContext(AuthContext);
+  const { authApi } = useContext(AuthContext);
+
+  const goToLogin = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Login' }],
+    });
+  };
 
   const handleSave = async () => {
     const p = password.trim();
@@ -29,15 +34,17 @@ const ForgotPasswordSetNewScreen = ({ route, navigation }) => {
     if (p !== cp) return alert('Passwords do not match.');
     setLoading(true);
     try {
-      const res = await authApi.resetPassword({
+      await authApi.resetPassword({
         identifier,
         channel,
         password: p,
         confirmPassword: cp,
       });
-      await AsyncStorage.setItem('token', res.data.token);
-      await loadUser();
-      navigation.navigate('Main', { screen: 'Rides' });
+      goToLogin();
+      setTimeout(
+        () => alert('Password updated. Sign in with your new password.'),
+        400
+      );
     } catch (err) {
       alert(err.response?.data?.message || 'Could not reset password.');
     } finally {
@@ -54,27 +61,24 @@ const ForgotPasswordSetNewScreen = ({ route, navigation }) => {
         <Text style={styles.title}>Set new password</Text>
         <Text style={styles.subtitle}>Enter your new password.</Text>
 
-        <TextInput
-          style={styles.input}
+        <PasswordInput
           placeholder="Enter Your New Password"
           value={password}
           onChangeText={setPassword}
-          secureTextEntry={!showPassword}
-          autoCapitalize="none"
+          visible={showPassword}
+          onToggleVisible={() => setShowPassword((s) => !s)}
+          containerStyle={styles.field}
+          inputStyle={styles.inputPlain}
         />
-        <TextInput
-          style={styles.input}
+        <PasswordInput
           placeholder="Confirm Password"
           value={confirmPassword}
           onChangeText={setConfirmPassword}
-          secureTextEntry={!showPassword}
-          autoCapitalize="none"
+          visible={showPassword}
+          onToggleVisible={() => setShowPassword((s) => !s)}
+          containerStyle={styles.field}
+          inputStyle={styles.inputPlain}
         />
-        <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.eyeToggle} onPress={() => setShowPassword((s) => !s)}>
-            <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
-          </TouchableOpacity>
-        </View>
         <Text style={styles.hint}>Allows 1 number or a special character.</Text>
 
         <TouchableOpacity style={styles.primaryButton} onPress={handleSave} disabled={loading}>
@@ -96,20 +100,14 @@ const styles = StyleSheet.create({
   backArrow: { fontSize: 24, color: colors.gray700 },
   title: { fontSize: 20, fontWeight: '600', color: colors.gray900, marginBottom: spacing.sm },
   subtitle: { fontSize: 16, color: colors.gray500, marginBottom: spacing.lg },
-  input: {
-    borderWidth: 1,
+  field: { marginBottom: spacing.md },
+  inputPlain: {
     borderColor: colors.gray300,
-    padding: 14,
+    backgroundColor: '#fff',
     borderRadius: 10,
-    marginBottom: spacing.md,
-    fontSize: 16,
+    padding: 14,
+    paddingRight: 48,
   },
-  actionsRow: {
-    alignItems: 'flex-end',
-    marginBottom: spacing.sm,
-  },
-  eyeToggle: { alignSelf: 'auto' },
-  eyeText: { color: colors.primary, fontSize: 14 },
   hint: { fontSize: 13, color: colors.gray500, marginBottom: spacing.xl },
   primaryButton: {
     backgroundColor: colors.primary,

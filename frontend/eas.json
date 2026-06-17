@@ -17,6 +17,9 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
+      "env": {
+        "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8"
+      },
       "android": {
         "buildType": "apk"
       },

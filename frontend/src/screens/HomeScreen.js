@@ -222,51 +222,10 @@ const HomeScreen = ({ navigation, route }) => {
 
   useEffect(() => () => resetBookingSimulation(), []);
 
-  // Refs hold latest deps so the focus/blur listeners stay registered ONCE and don't
-  // re-attach on every pickup/destination change (re-attaching ran cleanup → onBlur()
-  // → setMapReady(false), which made the map loader flash every time the user pinned
-  // a new point and looked like a continuous "Refreshing..." cycle).
-  const refreshMinFareEstimateRef = useRef(refreshMinFareEstimate);
-  refreshMinFareEstimateRef.current = refreshMinFareEstimate;
+  const refreshMinFareEstimateRef = useRef(null);
   const pickupCoordsRef = useRef(pickupCoords);
-  pickupCoordsRef.current = pickupCoords;
   const destinationCoordsRef = useRef(destinationCoords);
-  destinationCoordsRef.current = destinationCoords;
   const locatingRef = useRef(locating);
-  locatingRef.current = locating;
-
-  useEffect(() => {
-    const onFocus = () => {
-      if (hasValidRouteEndpoints(pickupCoordsRef.current, destinationCoordsRef.current)) {
-        void refreshMinFareEstimateRef.current();
-      }
-
-      // When returning from RideOptions, expo-maps can briefly show a blank/blue state
-      // while tiles/camera settle. Force loader overlay until onMapLoaded (or fallback).
-      if (locatingRef.current) return;
-      mapLoadEpochRef.current += 1;
-      setMapReady(false);
-      if (mapFocusTimeoutRef.current) clearTimeout(mapFocusTimeoutRef.current);
-      mapFocusTimeoutRef.current = setTimeout(() => {
-        setMapReady(true);
-      }, 2000);
-    };
-
-    const onBlur = () => {
-      if (mapFocusTimeoutRef.current) clearTimeout(mapFocusTimeoutRef.current);
-      mapFocusTimeoutRef.current = null;
-      setMapReady(false);
-    };
-
-    const unsubFocus = navigation.addListener('focus', onFocus);
-    const unsubBlur = navigation.addListener('blur', onBlur);
-    return () => {
-      unsubFocus();
-      unsubBlur();
-      if (mapFocusTimeoutRef.current) clearTimeout(mapFocusTimeoutRef.current);
-      mapFocusTimeoutRef.current = null;
-    };
-  }, [navigation]);
 
   useEffect(() => {
     animateSheetTo(SHEET_COLLAPSED);
@@ -355,6 +314,48 @@ const HomeScreen = ({ navigation, route }) => {
       // Keep the last estimate (e.g. from LocationSearch) on transient errors.
     }
   }, [pickupCoords, destinationCoords, rideType, carWithAc]);
+
+  // Refs hold latest deps so the focus/blur listeners stay registered ONCE and don't
+  // re-attach on every pickup/destination change (re-attaching ran cleanup → onBlur()
+  // → setMapReady(false), which made the map loader flash every time the user pinned
+  // a new point and looked like a continuous "Refreshing..." cycle).
+  refreshMinFareEstimateRef.current = refreshMinFareEstimate;
+  pickupCoordsRef.current = pickupCoords;
+  destinationCoordsRef.current = destinationCoords;
+  locatingRef.current = locating;
+
+  useEffect(() => {
+    const onFocus = () => {
+      if (hasValidRouteEndpoints(pickupCoordsRef.current, destinationCoordsRef.current)) {
+        refreshMinFareEstimateRef.current?.();
+      }
+
+      // When returning from RideOptions, expo-maps can briefly show a blank/blue state
+      // while tiles/camera settle. Force loader overlay until onMapLoaded (or fallback).
+      if (locatingRef.current) return;
+      mapLoadEpochRef.current += 1;
+      setMapReady(false);
+      if (mapFocusTimeoutRef.current) clearTimeout(mapFocusTimeoutRef.current);
+      mapFocusTimeoutRef.current = setTimeout(() => {
+        setMapReady(true);
+      }, 2000);
+    };
+
+    const onBlur = () => {
+      if (mapFocusTimeoutRef.current) clearTimeout(mapFocusTimeoutRef.current);
+      mapFocusTimeoutRef.current = null;
+      setMapReady(false);
+    };
+
+    const unsubFocus = navigation.addListener('focus', onFocus);
+    const unsubBlur = navigation.addListener('blur', onBlur);
+    return () => {
+      unsubFocus();
+      unsubBlur();
+      if (mapFocusTimeoutRef.current) clearTimeout(mapFocusTimeoutRef.current);
+      mapFocusTimeoutRef.current = null;
+    };
+  }, [navigation]);
 
   // Debounce so rapid coord changes (map drag, GPS jitter, ride-type toggle) coalesce
   // into a single backend call instead of one per re-render.

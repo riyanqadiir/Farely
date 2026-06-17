@@ -16,6 +16,7 @@
         }
       ],
       "expo-maps",
+      "./plugins/withGradleJvmArgs",
       "./plugins/withFareAccessibilityService"
     ],
     "splash": {
@@ -29,6 +30,13 @@
       "buildNumber": "1",
       "infoPlist": {
         "LSApplicationQueriesSchemes": [
+          "tel",
+          "telprompt",
+          "geo",
+          "yandexyango",
+          "yango",
+          "bykea",
+          "bykeapk",
           "tel",
           "telprompt",
           "geo",
@@ -52,13 +60,27 @@
         "googleMaps": {
           "apiKey": "AIzaSyBMeAW6Aj0j8-7N6l47W43yecXFJlJ--TU"
         }
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.ico"
     },
     "extra": {
-      "googleMapsApiKey": "AIzaSyBMeAW6Aj0j8-7N6l47W43yecXFJlJ--TU"
+      "googleMapsApiKey": "AIzaSyBMeAW6Aj0j8-7N6l47W43yecXFJlJ--TU",
+      "eas": {
+        "projectId": "c7383335-1cad-4137-a29b-0bb8ac732fb7"
+      }
+    },
+    "owner": "rayyanbhattis-team",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c7383335-1cad-4137-a29b-0bb8ac732fb7"
     }
   }
 }

@@ -13,6 +13,7 @@ import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { AuthContext } from '../context/AuthContext';
 import { colors, spacing } from '../constants/theme';
 import AuthDivider from '../components/AuthDivider';
+import PasswordInput from '../components/PasswordInput';
 
 const LoginScreen = ({ navigation }) => {
   const [loginId, setLoginId] = useState('');
@@ -71,16 +72,14 @@ const LoginScreen = ({ navigation }) => {
           />
 
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
+          <PasswordInput
             placeholder="••••••••"
-            placeholderTextColor="#9ca3af"
             value={password}
             onChangeText={(t) => {
               setPassword(t);
               setPasswordNotSetHint(false);
             }}
-            secureTextEntry
+            containerStyle={styles.passwordField}
           />
 
           {passwordNotSetHint ? (
@@ -191,6 +190,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     fontSize: 16,
     color: colors.gray900,
+  },
+  passwordField: {
+    marginBottom: spacing.md,
   },
   passwordHint: {
     fontSize: 13,

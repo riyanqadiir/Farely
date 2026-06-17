@@ -1,8 +1,6 @@
 import React, { useState, useContext } from 'react';
 import {
-  View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -10,7 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import PasswordInput from '../components/PasswordInput';
 import { colors, spacing } from '../constants/theme';
 
 const SetPasswordScreen = ({ route, navigation }) => {
@@ -19,7 +17,14 @@ const SetPasswordScreen = ({ route, navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { authApi, loadUser, pendingProfileComplete } = useContext(AuthContext);
+  const { authApi } = useContext(AuthContext);
+
+  const goToLogin = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Login' }],
+    });
+  };
 
   const handleSetPassword = async () => {
     const p = password.trim();
@@ -29,22 +34,17 @@ const SetPasswordScreen = ({ route, navigation }) => {
     if (p !== cp) return alert('Passwords do not match.');
     setLoading(true);
     try {
-      const res = await authApi.setPassword({
+      await authApi.setPassword({
         identifier,
         channel,
         password: p,
         confirmPassword: cp,
       });
-      await AsyncStorage.setItem('token', res.data.token);
-      await loadUser();
-      const targetRoute = pendingProfileComplete ? 'CompleteProfile' : 'Main';
-      navigation.reset({
-        index: 0,
-        routes:
-          targetRoute === 'Main'
-            ? [{ name: 'Main', params: { screen: 'Rides' } }]
-            : [{ name: 'CompleteProfile' }],
-      });
+      goToLogin();
+      setTimeout(
+        () => alert('Password set successfully. Sign in with your email or phone and password.'),
+        400
+      );
     } catch (err) {
       alert(err.response?.data?.message || 'Could not set password.');
     } finally {
@@ -61,28 +61,24 @@ const SetPasswordScreen = ({ route, navigation }) => {
         <Text style={styles.title}>Set password</Text>
         <Text style={styles.subtitle}>Set your password.</Text>
 
-        <TextInput
-          style={styles.input}
+        <PasswordInput
           placeholder="Enter Your Password"
           value={password}
           onChangeText={setPassword}
-          secureTextEntry={!showPassword}
-          autoCapitalize="none"
+          visible={showPassword}
+          onToggleVisible={() => setShowPassword((s) => !s)}
+          containerStyle={styles.field}
+          inputStyle={styles.inputPlain}
         />
-        <TextInput
-          style={styles.input}
+        <PasswordInput
           placeholder="Confirm Password"
           value={confirmPassword}
           onChangeText={setConfirmPassword}
-          secureTextEntry={!showPassword}
-          autoCapitalize="none"
+          visible={showPassword}
+          onToggleVisible={() => setShowPassword((s) => !s)}
+          containerStyle={styles.field}
+          inputStyle={styles.inputPlain}
         />
-        <TouchableOpacity
-          style={styles.eyeToggle}
-          onPress={() => setShowPassword((s) => !s)}
-        >
-          <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
-        </TouchableOpacity>
         <Text style={styles.hint}>Allows 1 number or a special character.</Text>
 
         <TouchableOpacity
@@ -108,16 +104,14 @@ const styles = StyleSheet.create({
   backArrow: { fontSize: 24, color: colors.gray700 },
   title: { fontSize: 20, fontWeight: '600', color: colors.gray900, marginBottom: spacing.sm },
   subtitle: { fontSize: 16, color: colors.gray500, marginBottom: spacing.lg },
-  input: {
-    borderWidth: 1,
+  field: { marginBottom: spacing.md },
+  inputPlain: {
     borderColor: colors.gray300,
-    padding: 14,
+    backgroundColor: '#fff',
     borderRadius: 10,
-    marginBottom: spacing.md,
-    fontSize: 16,
+    padding: 14,
+    paddingRight: 48,
   },
-  eyeToggle: { alignSelf: 'flex-end', marginBottom: spacing.sm },
-  eyeText: { color: colors.primary, fontSize: 14 },
   hint: { fontSize: 13, color: colors.gray500, marginBottom: spacing.xl },
   primaryButton: {
     backgroundColor: colors.primary,

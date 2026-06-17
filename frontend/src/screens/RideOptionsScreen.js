@@ -192,7 +192,7 @@ const RideOptionsScreen = ({ navigation, route }) => {
   const loggedEstimatesRef = useRef(new Map());
   const activeHandoffIdRef = useRef(null);
   const plannedHandoffIdRef = useRef(null);
-  const planRouteRequestedRef = useRef(false);
+  const planRouteKeyRef = useRef('');
   const captureDebouncerRef = useRef(null);
   if (!captureDebouncerRef.current) {
     captureDebouncerRef.current = createLiveCaptureDebouncer(450);
@@ -345,26 +345,43 @@ const RideOptionsScreen = ({ navigation, route }) => {
     await refreshCardsFromStoredCaptures(preferredProvider);
   };
 
-  useEffect(() => {
-    if (!hasValidRouteEndpoints(pickupCoords, destinationCoords)) {
-      setRouteReady('skipped');
-      return;
-    }
-    if (planRouteRequestedRef.current) return;
-    planRouteRequestedRef.current = true;
-    setRouteReady('loading');
+  const registerPlannedRoute = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!hasValidRouteEndpoints(pickupCoords, destinationCoords)) {
+        if (mountedRef.current) setRouteReady('skipped');
+        return false;
+      }
 
-    const body = buildRouteHandoffBody({
-      searchLogId,
-      pickup,
-      destination,
-      pickupCoords,
-      destinationCoords,
-      rideType,
-      carAc,
-    });
+      const routeKey = [
+        searchLogId || '',
+        pickup,
+        destination,
+        pickupCoords.latitude,
+        pickupCoords.longitude,
+        destinationCoords.latitude,
+        destinationCoords.longitude,
+        rideType,
+        carAc ? '1' : '0',
+      ].join('|');
 
-    (async () => {
+      if (planRouteKeyRef.current !== routeKey) {
+        planRouteKeyRef.current = routeKey;
+        plannedHandoffIdRef.current = null;
+        activeHandoffIdRef.current = null;
+      }
+
+      if (mountedRef.current) setRouteReady('loading');
+
+      const body = buildRouteHandoffBody({
+        searchLogId,
+        pickup,
+        destination,
+        pickupCoords,
+        destinationCoords,
+        rideType,
+        carAc,
+      });
+
       try {
         const res = await farelyApi.post('/rides/ride-handoff/plan-route', body);
         const id = res?.data?.id;
@@ -372,27 +389,43 @@ const RideOptionsScreen = ({ navigation, route }) => {
           plannedHandoffIdRef.current = id;
           activeHandoffIdRef.current = id;
         }
-        if (mountedRef.current) setRouteReady(id ? 'ready' : 'failed');
-      } catch (_) {
-        if (mountedRef.current) {
-          setRouteReady('failed');
+        const ok = Boolean(id);
+        if (mountedRef.current) setRouteReady(ok ? 'ready' : 'failed');
+        if (!ok && !silent && mountedRef.current) {
           showAppToast({
             title: 'Could not register route',
-            body: 'Open app is disabled until pickup and drop-off are saved.',
+            body: 'Check your connection and try Open app again.',
             tone: 'error',
           });
         }
+        return ok;
+      } catch (err) {
+        if (mountedRef.current) setRouteReady('failed');
+        if (!silent && mountedRef.current) {
+          const apiMsg = err?.response?.data?.msg || err?.response?.data?.message;
+          showAppToast({
+            title: 'Could not register route',
+            body: apiMsg || 'Check you are logged in and connected to the internet.',
+            tone: 'error',
+          });
+        }
+        return false;
       }
-    })();
-  }, [
-    searchLogId,
-    pickup,
-    destination,
-    pickupCoords,
-    destinationCoords,
-    rideType,
-    carAc,
-  ]);
+    },
+    [
+      searchLogId,
+      pickup,
+      destination,
+      pickupCoords,
+      destinationCoords,
+      rideType,
+      carAc,
+    ]
+  );
+
+  useEffect(() => {
+    void registerPlannedRoute({ silent: true });
+  }, [registerPlannedRoute]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
@@ -599,12 +632,15 @@ const RideOptionsScreen = ({ navigation, route }) => {
       return;
     }
     if (routeReady === 'failed') {
-      showAppToast({
-        title: 'Route not saved',
-        body: 'Go back and run Compare again before opening a provider app.',
-        tone: 'error',
-      });
-      return;
+      const recovered = await registerPlannedRoute({ silent: true });
+      if (!recovered) {
+        showAppToast({
+          title: 'Route not saved',
+          body: 'Could not reach the Farely server. Check login and internet, then try again.',
+          tone: 'error',
+        });
+        return;
+      }
     }
 
     setBookingLoadingId(id);
