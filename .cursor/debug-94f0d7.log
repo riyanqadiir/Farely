@@ -1,0 +1,2 @@
+{"sessionId":"94f0d7","timestamp":1780469905738,"location":"rides.controller.js:compare:entry","message":"compare hit","hypothesisId":"B,C","data":{"userId":"69ed408f595babc174868840","hasAuth":true}}
+{"sessionId":"94f0d7","timestamp":1780469905921,"location":"rides.controller.js:compare:ok","message":"compare ok","hypothesisId":"D","data":{"comparisonCount":2,"distanceKm":1.42}}

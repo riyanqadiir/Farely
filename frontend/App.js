@@ -32,6 +32,7 @@ import TermsScreen from './src/screens/TermsScreen';
 import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
 import RideHistoryScreen from './src/screens/RideHistoryScreen';
 import RideReviewScreen from './src/screens/RideReviewScreen';
+import AccountBlockedScreen from './src/screens/AccountBlockedScreen';
 import {
   ActivityIndicator,
   View,
@@ -42,6 +43,7 @@ import {
   TouchableOpacity,
   Text,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { RideWidgetProvider } from './src/context/RideWidgetContext';
@@ -51,8 +53,21 @@ import { navigationRef } from './src/navigation/rootNavigation';
 import { parseProviderReturnUrl } from './src/utils/providerRedirect';
 import farelyApi from './src/api/farelyApi';
 import { pushAppNotification } from './src/utils/notifications';
-import { getPendingRideConfirmation, removePendingRideConfirmation } from './src/utils/rideConfirmation';
+import {
+  getPendingRideConfirmation,
+  removePendingRideConfirmation,
+  patchPendingRideConfirmation,
+} from './src/utils/rideConfirmation';
+import { syncCaptureForPendingHandoff } from './src/utils/handoffCaptureSync';
 import { showAppToast } from './src/utils/appToast';
+import { clearActiveCaptureHandoff } from './src/utils/activeCaptureHandoff';
+import { subscribeToUiData } from './src/native/accessibilityBridge';
+import {
+  applyLiveCaptureEvent,
+  drainBufferedUiCapture,
+  parseUiDataCapture,
+} from './src/utils/liveCapturePipeline';
+import { createLiveCaptureDebouncer } from './src/utils/liveCaptureDebounced';
 
 const TAB_ICON_SIZE = 24;
 
@@ -122,7 +137,7 @@ function MainTab() {
 }
 
 const AppNavigator = () => {
-  const { user, loading, pendingProfileComplete } = useContext(AuthContext);
+  const { user, loading, pendingProfileComplete, sessionInvalidation } = useContext(AuthContext);
   const { colors, isDark } = useTheme();
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(null);
   const [pendingPrompt, setPendingPrompt] = useState(null);
@@ -149,13 +164,27 @@ const AppNavigator = () => {
     });
   }, []);
 
+  const mergePendingWithCapture = async (pending) => {
+    if (!pending?.handoffId) return pending;
+    await drainBufferedUiCapture();
+    if (typeof pending.capturedFare === 'number' && pending.capturedFare > 0) return pending;
+    const synced = await syncCaptureForPendingHandoff(pending);
+    if (!synced?.capturedFare) return pending;
+    await patchPendingRideConfirmation(pending.handoffId, synced);
+    return { ...pending, ...synced };
+  };
+
   const confirmPendingRide = async () => {
-    if (pendingPrompt?.handoffId) return;
     const token = await AsyncStorage.getItem('token');
     if (!token) return;
-    const pending = await getPendingRideConfirmation();
+    let pending = await getPendingRideConfirmation();
     if (!pending?.handoffId) return;
-    setPendingPrompt(pending);
+    pending = await mergePendingWithCapture(pending);
+    setPendingPrompt((prev) => {
+      if (prev?.handoffId && prev.handoffId !== pending.handoffId) return prev;
+      if (prev?.handoffId === pending.handoffId) return { ...prev, ...pending };
+      return pending;
+    });
   };
 
   useEffect(() => {
@@ -182,16 +211,41 @@ const AppNavigator = () => {
     void confirmPendingRide();
   }, [loading, user]);
 
+  /** Global capture: persists fares while RideOptions is unmounted / JS was backgrounded. */
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !user) return;
+    const debouncer = createLiveCaptureDebouncer(450);
+    const sub = subscribeToUiData((data) => {
+      const capture = parseUiDataCapture(data);
+      if (!capture) return;
+      debouncer.schedule(capture, async (job) => {
+        await applyLiveCaptureEvent(job);
+      });
+    });
+    return () => {
+      sub.remove();
+      debouncer.clear();
+    };
+  }, [user]);
+
   const decidePendingRide = async (taken) => {
-    const pending = pendingPrompt;
+    let pending = pendingPrompt;
     if (!pending?.handoffId) return;
     setPendingPrompt(null);
+    pending = await mergePendingWithCapture(pending);
     try {
       await farelyApi.post('/rides/ride-handoff/confirm', {
         handoffId: pending.handoffId,
         taken,
+        ...(typeof pending.capturedFare === 'number' && pending.capturedFare > 0
+          ? {
+              capturedFare: Math.round(pending.capturedFare),
+              capturedProvider: pending.capturedProvider || pending.provider,
+            }
+          : {}),
       });
       await removePendingRideConfirmation(pending.handoffId);
+      await clearActiveCaptureHandoff();
       pushAppNotification({
         type: 'ride',
         title: taken ? 'Ride confirmed' : 'Ride not confirmed',
@@ -251,7 +305,7 @@ const AppNavigator = () => {
       }
       setTimeout(() => {
         void confirmPendingRide();
-      }, 400);
+      }, 900);
     };
 
     Linking.getInitialURL().then((url) => {
@@ -264,7 +318,9 @@ const AppNavigator = () => {
 
     const appStateSub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        void confirmPendingRide();
+        setTimeout(() => {
+          void confirmPendingRide();
+        }, 900);
       }
     });
 
@@ -290,16 +346,27 @@ const AppNavigator = () => {
   };
   const initialAuthRoute = hasSeenOnboarding ? 'Welcome' : 'Onboarding';
   const initialUserRoute = pendingProfileComplete ? 'CompleteProfile' : 'Main';
+  // A live block/deletion takes priority over both the auth and the
+  // signed-in stacks: the user lands directly on the lock-out screen.
+  const isInvalidated = !!sessionInvalidation;
 
   return (
     <SafeAreaProvider>
       <NavigationContainer ref={navigationRef} theme={navTheme}>
         <Stack.Navigator
-          key={user ? 'authenticated' : 'unauthenticated'}
+          key={isInvalidated ? 'invalidated' : user ? 'authenticated' : 'unauthenticated'}
           screenOptions={stackScreenOptions}
-          initialRouteName={user ? initialUserRoute : initialAuthRoute}
+          initialRouteName={
+            isInvalidated ? 'AccountBlocked' : user ? initialUserRoute : initialAuthRoute
+          }
         >
-          {user ? (
+          {isInvalidated ? (
+            <Stack.Screen
+              name="AccountBlocked"
+              component={AccountBlockedScreen}
+              options={{ gestureEnabled: false }}
+            />
+          ) : user ? (
             <>
               <Stack.Screen name="CompleteProfile" component={CompleteProfileScreen} />
               <Stack.Screen name="Main" component={MainTab} />
@@ -372,6 +439,14 @@ function RideConfirmModal({ pending, colors, onLater, onNo, onYes }) {
   const fromText = pending.pickup || 'Pickup location';
   const toText = pending.destination || 'Drop-off location';
   const provider = pending.provider || 'provider';
+  const estimateFare =
+    typeof pending.estimatedFare === 'number' && Number.isFinite(pending.estimatedFare)
+      ? pending.estimatedFare
+      : null;
+  const liveFare =
+    typeof pending.capturedFare === 'number' && Number.isFinite(pending.capturedFare)
+      ? pending.capturedFare
+      : null;
   return (
     <Modal transparent animationType="fade" visible>
       <View style={modalStyles.overlay}>
@@ -395,6 +470,21 @@ function RideConfirmModal({ pending, colors, onLater, onNo, onYes }) {
               <Text style={[modalStyles.routeText, { color: colors.text }]} numberOfLines={1}>{toText}</Text>
             </View>
           </View>
+
+          {liveFare != null || estimateFare != null ? (
+            <View style={[modalStyles.fareRow, { borderColor: colors.border }]}>
+              {estimateFare != null ? (
+                <Text style={[modalStyles.fareMeta, { color: colors.textMuted }]}>
+                  Farely estimate: PKR {Math.round(estimateFare)}
+                </Text>
+              ) : null}
+              {liveFare != null ? (
+                <Text style={[modalStyles.fareLive, { color: colors.accent }]}>
+                  Captured in {provider}: PKR {Math.round(liveFare)}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
 
           <View style={modalStyles.actions}>
             <TouchableOpacity
@@ -474,6 +564,14 @@ const modalStyles = StyleSheet.create({
   routeTextWrap: { flex: 1 },
   routeLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
   routeText: { marginTop: 2, fontSize: 13, fontWeight: '700' },
+  fareRow: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    paddingTop: 10,
+    gap: 4,
+  },
+  fareMeta: { fontSize: 12, fontWeight: '700' },
+  fareLive: { fontSize: 13, fontWeight: '900' },
   actions: { marginTop: 14, flexDirection: 'row', gap: 8 },
   ghostBtn: {
     borderWidth: 1,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,15 @@ import {
   saveCapturedFare,
 } from '../utils/liveFareStore';
 import { applyYangoBykeaMinSpread } from '../utils/yangoBykeaFareSpread';
+import { buildLiveCalibrationFromCaptures } from '../utils/liveCalibration';
+import { createLiveCaptureDebouncer } from '../utils/liveCaptureDebounced';
+import {
+  getHotspotItems,
+  pickSurgeZone,
+  applySurgeToFare,
+  NEUTRAL_SURGE,
+  getSurgeChipPalette,
+} from '../utils/surgeStore';
 
 const normalizeProvider = (value) => {
   const v = String(value || '').trim().toLowerCase();
@@ -98,6 +107,17 @@ function isInPakistan(latitude, longitude) {
   return inside;
 }
 
+function hasValidRouteEndpoints(pickupCoords, destinationCoords) {
+  return (
+    pickupCoords
+    && destinationCoords
+    && typeof pickupCoords.latitude === 'number'
+    && typeof pickupCoords.longitude === 'number'
+    && typeof destinationCoords.latitude === 'number'
+    && typeof destinationCoords.longitude === 'number'
+  );
+}
+
 const HomeScreen = ({ navigation, route }) => {
   const { colors: themeColors } = useTheme();
   const styles = useMemo(() => createHomeStyles(themeColors), [themeColors]);
@@ -122,6 +142,7 @@ const HomeScreen = ({ navigation, route }) => {
   const [locationPromptMode, setLocationPromptMode] = useState('permission'); // permission | services
   const [fares, setFares] = useState([]);
   const [baseFareEstimate, setBaseFareEstimate] = useState(null);
+  const [trafficSurge, setTrafficSurge] = useState(NEUTRAL_SURGE);
   const [compareDistanceKm, setCompareDistanceKm] = useState(null);
   const [rideOverlayOpen, setRideOverlayOpen] = useState(false);
   const [bookingLoadingId, setBookingLoadingId] = useState(null);
@@ -143,6 +164,11 @@ const HomeScreen = ({ navigation, route }) => {
   const sheetTranslateY = useRef(new Animated.Value(SHEET_COLLAPSED)).current;
   const locationBannerY = useRef(new Animated.Value(-22)).current;
   const locationBannerOpacity = useRef(new Animated.Value(0)).current;
+  const minFareRefreshSeq = useRef(0);
+  const homeCaptureDebouncerRef = useRef(null);
+  if (!homeCaptureDebouncerRef.current) {
+    homeCaptureDebouncerRef.current = createLiveCaptureDebouncer(500);
+  }
 
   const animateSheetTo = (toValue) => {
     Animated.spring(sheetTranslateY, {
@@ -196,16 +222,32 @@ const HomeScreen = ({ navigation, route }) => {
 
   useEffect(() => () => resetBookingSimulation(), []);
 
+  // Refs hold latest deps so the focus/blur listeners stay registered ONCE and don't
+  // re-attach on every pickup/destination change (re-attaching ran cleanup → onBlur()
+  // → setMapReady(false), which made the map loader flash every time the user pinned
+  // a new point and looked like a continuous "Refreshing..." cycle).
+  const refreshMinFareEstimateRef = useRef(refreshMinFareEstimate);
+  refreshMinFareEstimateRef.current = refreshMinFareEstimate;
+  const pickupCoordsRef = useRef(pickupCoords);
+  pickupCoordsRef.current = pickupCoords;
+  const destinationCoordsRef = useRef(destinationCoords);
+  destinationCoordsRef.current = destinationCoords;
+  const locatingRef = useRef(locating);
+  locatingRef.current = locating;
+
   useEffect(() => {
     const onFocus = () => {
+      if (hasValidRouteEndpoints(pickupCoordsRef.current, destinationCoordsRef.current)) {
+        void refreshMinFareEstimateRef.current();
+      }
+
       // When returning from RideOptions, expo-maps can briefly show a blank/blue state
       // while tiles/camera settle. Force loader overlay until onMapLoaded (or fallback).
-      if (locating) return;
+      if (locatingRef.current) return;
       mapLoadEpochRef.current += 1;
       setMapReady(false);
       if (mapFocusTimeoutRef.current) clearTimeout(mapFocusTimeoutRef.current);
       mapFocusTimeoutRef.current = setTimeout(() => {
-        // Safety fallback in case onMapLoaded doesn't fire on some devices.
         setMapReady(true);
       }, 2000);
     };
@@ -213,7 +255,6 @@ const HomeScreen = ({ navigation, route }) => {
     const onBlur = () => {
       if (mapFocusTimeoutRef.current) clearTimeout(mapFocusTimeoutRef.current);
       mapFocusTimeoutRef.current = null;
-      // Next time we come back, always show loader first.
       setMapReady(false);
     };
 
@@ -222,9 +263,10 @@ const HomeScreen = ({ navigation, route }) => {
     return () => {
       unsubFocus();
       unsubBlur();
-      onBlur();
+      if (mapFocusTimeoutRef.current) clearTimeout(mapFocusTimeoutRef.current);
+      mapFocusTimeoutRef.current = null;
     };
-  }, [navigation, locating]);
+  }, [navigation]);
 
   useEffect(() => {
     animateSheetTo(SHEET_COLLAPSED);
@@ -266,99 +308,99 @@ const HomeScreen = ({ navigation, route }) => {
     if (typeof selection.distanceKmEstimate === 'number' && Number.isFinite(selection.distanceKmEstimate)) {
       setCompareDistanceKm(selection.distanceKmEstimate);
     }
+    if (typeof selection.minFareCalibrated === 'boolean') {
+      setMinFareCalibrated(selection.minFareCalibrated);
+    }
 
     navigation.setParams({ locationSelection: undefined });
   }, [navigation, route?.params?.locationSelection]);
 
-  useEffect(() => {
-    const sub = subscribeToUiData(async (data) => {
-      const provider = normalizeProvider(data?.provider);
-      const fare = typeof data?.fare === 'number' ? data.fare : Number(data?.fare);
-      const rawText = typeof data?.rawText === 'string' ? data.rawText.trim() : '';
-      const key = buildCaptureStorageKey(pickupCoords, destinationCoords, rideType, carWithAc);
-      if (!key || !provider || !Number.isFinite(fare) || fare <= 0) return;
-      await saveCapturedFare(key, provider, fare, rawText);
-    });
-    return () => sub?.remove?.();
-  }, [pickupCoords, destinationCoords, rideType, carWithAc]);
-
-  // Recompute minimum fare when ride type, car AC option, or endpoints change.
-  useEffect(() => {
-    const hasEndpoints =
-      pickupCoords
-      && destinationCoords
-      && typeof pickupCoords.latitude === 'number'
-      && typeof pickupCoords.longitude === 'number'
-      && typeof destinationCoords.latitude === 'number'
-      && typeof destinationCoords.longitude === 'number';
-
-    if (!hasEndpoints) {
+  const refreshMinFareEstimate = useCallback(async () => {
+    if (!hasValidRouteEndpoints(pickupCoords, destinationCoords)) {
       setBaseFareEstimate(null);
       setCompareDistanceKm(null);
       setMinFareCalibrated(false);
       return;
     }
 
+    const reqId = ++minFareRefreshSeq.current;
+    try {
+      const captured = await getCapturedFaresForContext(
+        pickupCoords,
+        destinationCoords,
+        rideType,
+        carWithAc
+      );
+      const liveCalibration = buildLiveCalibrationFromCaptures(captured);
+
+      const res = await farelyApi.post('/rides/estimate-min', {
+        pickupLat: pickupCoords.latitude,
+        pickupLng: pickupCoords.longitude,
+        destinationLat: destinationCoords.latitude,
+        destinationLng: destinationCoords.longitude,
+        rideType,
+        carAc: rideType === 'car' ? carWithAc : false,
+        ...(liveCalibration.length ? { liveCalibration } : {}),
+      });
+      if (reqId !== minFareRefreshSeq.current) return;
+      const d = res.data || {};
+      if (typeof d.baseFare === 'number' && Number.isFinite(d.baseFare)) {
+        setBaseFareEstimate(d.baseFare);
+      }
+      if (typeof d.distanceKm === 'number' && Number.isFinite(d.distanceKm)) {
+        setCompareDistanceKm(d.distanceKm);
+      }
+      setMinFareCalibrated(Boolean(d.calibratedFromScrapes));
+    } catch (_) {
+      // Keep the last estimate (e.g. from LocationSearch) on transient errors.
+    }
+  }, [pickupCoords, destinationCoords, rideType, carWithAc]);
+
+  // Debounce so rapid coord changes (map drag, GPS jitter, ride-type toggle) coalesce
+  // into a single backend call instead of one per re-render.
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      void refreshMinFareEstimate();
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [refreshMinFareEstimate]);
+
+  useEffect(() => {
+    const debouncer = homeCaptureDebouncerRef.current;
+    const sub = subscribeToUiData((data) => {
+      const provider = normalizeProvider(data?.provider);
+      const fare = typeof data?.fare === 'number' ? data.fare : Number(data?.fare);
+      const rawText = typeof data?.rawText === 'string' ? data.rawText.trim() : '';
+      const key = buildCaptureStorageKey(pickupCoords, destinationCoords, rideType, carWithAc);
+      if (!key || !provider || !Number.isFinite(fare) || fare <= 0) return;
+
+      debouncer.schedule({ provider, fare, rawText }, async () => {
+        await saveCapturedFare(key, provider, fare, rawText);
+        await refreshMinFareEstimate();
+      });
+    });
+    return () => {
+      sub?.remove?.();
+      debouncer?.clear?.();
+    };
+  }, [pickupCoords, destinationCoords, rideType, carWithAc, refreshMinFareEstimate]);
+
+  useEffect(() => {
+    const lat = pickupCoords?.latitude;
+    const lng = pickupCoords?.longitude;
     let cancelled = false;
     (async () => {
-      try {
-        const captured = await getCapturedFaresForContext(
-          pickupCoords,
-          destinationCoords,
-          rideType,
-          carWithAc
-        );
-        const liveCalibration = captured
-          .map((c) => ({ provider: normalizeProvider(c?.provider), fare: Number(c?.fare) }))
-          .filter(
-            (c) =>
-              (c.provider === 'Yango' || c.provider === 'Bykea')
-              && Number.isFinite(c.fare)
-              && c.fare > 0
-          );
-
-        const res = await farelyApi.post('/rides/estimate-min', {
-          pickupLat: pickupCoords.latitude,
-          pickupLng: pickupCoords.longitude,
-          destinationLat: destinationCoords.latitude,
-          destinationLng: destinationCoords.longitude,
-          rideType,
-          carAc: rideType === 'car' ? carWithAc : false,
-          ...(liveCalibration.length ? { liveCalibration } : {}),
-        });
-        if (cancelled) return;
-        const d = res.data || {};
-        if (typeof d.baseFare === 'number' && Number.isFinite(d.baseFare)) {
-          setBaseFareEstimate(d.baseFare);
-        }
-        if (typeof d.distanceKm === 'number' && Number.isFinite(d.distanceKm)) {
-          setCompareDistanceKm(d.distanceKm);
-        }
-        setMinFareCalibrated(Boolean(d.calibratedFromScrapes));
-      } catch (_) {
-        if (!cancelled) {
-          setBaseFareEstimate(null);
-          setCompareDistanceKm(null);
-          setMinFareCalibrated(false);
-        }
-      }
+      const items = await getHotspotItems(false);
+      if (cancelled) return;
+      setTrafficSurge(pickSurgeZone(lat, lng, items));
     })();
-
     return () => {
       cancelled = true;
     };
-  }, [rideType, carWithAc, pickupCoords, destinationCoords]);
+  }, [pickupCoords?.latitude, pickupCoords?.longitude]);
 
   useEffect(() => {
-    const hasEndpoints =
-      pickupCoords
-      && destinationCoords
-      && typeof pickupCoords.latitude === 'number'
-      && typeof pickupCoords.longitude === 'number'
-      && typeof destinationCoords.latitude === 'number'
-      && typeof destinationCoords.longitude === 'number';
-
-    if (!hasEndpoints) {
+    if (!hasValidRouteEndpoints(pickupCoords, destinationCoords)) {
       setRouteCoords([]);
       return;
     }
@@ -570,29 +612,24 @@ const HomeScreen = ({ navigation, route }) => {
         rideType,
         carWithAc
       );
-      const liveCalibration = captured
-        .map((c) => ({ provider: normalizeProvider(c?.provider), fare: Number(c?.fare) }))
-        .filter(
-          (c) =>
-            (c.provider === 'Yango' || c.provider === 'Bykea')
-            && Number.isFinite(c.fare)
-            && c.fare > 0
-        );
-
       const payload = { pickup, destination, rideType, carAc: rideType === 'car' ? carWithAc : false };
       payload.pickupLat = pickupCoords.latitude;
       payload.pickupLng = pickupCoords.longitude;
       payload.destinationLat = destinationCoords.latitude;
       payload.destinationLng = destinationCoords.longitude;
-      if (liveCalibration.length) {
-        payload.liveCalibration = liveCalibration;
-      }
 
+      // Compare uses model estimates; live scrapes merge into cards from this route's storage only.
       const res = await farelyApi.post('/rides/compare', payload);
       const raw = res.data;
       const baseFareEarly = Array.isArray(raw) ? null : raw?.baseFare;
       const distKmEarly = Array.isArray(raw) ? null : raw?.distanceKm;
       const list = Array.isArray(raw) ? raw : raw?.comparisons || [];
+      const estimateOnlyFares = applyYangoBykeaMinSpread(
+        list.filter((item) => {
+          const p = normalizeProvider(item?.provider).toLowerCase();
+          return p === 'yango' || p === 'bykea';
+        })
+      );
       const mergedFromApi = list.map((item) => {
         const itemProvider = normalizeProvider(item?.provider);
         const match = captured.find(
@@ -657,6 +694,7 @@ const HomeScreen = ({ navigation, route }) => {
         rideType,
         carAc: rideType === 'car' ? carWithAc : false,
         fares: mergedSpread,
+        estimateFares: estimateOnlyFares,
         baseFare: typeof baseFare === 'number' ? baseFare : undefined,
         distanceKm: typeof distKm === 'number' ? distKm : undefined,
         searchLogId: Array.isArray(raw) ? undefined : raw?.searchLogId,
@@ -704,6 +742,23 @@ const HomeScreen = ({ navigation, route }) => {
       setBookingLoadingId(null);
     }
   };
+
+  const homeSurgePalette =
+    trafficSurge.surgeLevel !== 'normal' ? getSurgeChipPalette(trafficSurge.surgeLevel) : null;
+  const homeSurgeMult =
+    Number.isFinite(trafficSurge.surgeMultiplier) && trafficSurge.surgeMultiplier > 1
+      ? String(Math.round(trafficSurge.surgeMultiplier * 100) / 100)
+      : '1';
+  const homeSurgeChipText =
+    trafficSurge.zoneName && trafficSurge.surgeLevel !== 'normal'
+      ? `⚡ ${homeSurgeMult}× surge — ${trafficSurge.zoneName} is busy`
+      : trafficSurge.surgeLevel !== 'normal'
+        ? `⚡ ${homeSurgeMult}× surge in this area`
+        : null;
+  const displayHomeBaseFare =
+    typeof baseFareEstimate === 'number' && Number.isFinite(baseFareEstimate)
+      ? applySurgeToFare(baseFareEstimate, trafficSurge)
+      : null;
 
   // Keep map mounted; show loader until ready.
   const mapDisabled = false;
@@ -978,11 +1033,24 @@ const HomeScreen = ({ navigation, route }) => {
       </View>
 
             <Text style={styles.tipText}>Tap on the map to set destination.</Text>
-            {typeof baseFareEstimate === 'number' && (
-              <View style={styles.baseFareBanner}>
+            {displayHomeBaseFare != null && (
+              <>
+                {!!homeSurgePalette && homeSurgeChipText && (
+                  <View
+                    style={[
+                      styles.trafficSurgeChip,
+                      { backgroundColor: homeSurgePalette.bg, borderColor: homeSurgePalette.border },
+                    ]}
+                  >
+                    <Text style={[styles.trafficSurgeChipText, { color: homeSurgePalette.fg }]}>
+                      {homeSurgeChipText}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.baseFareBanner}>
                 <Text style={styles.baseFareLabel}>Minimum fare (estimate)</Text>
                 <Text style={styles.baseFareValue}>
-                  PKR {Math.round(baseFareEstimate)}
+                  PKR {Math.round(displayHomeBaseFare)}
                   {typeof compareDistanceKm === 'number' ? ` · ${compareDistanceKm} km` : ''}
                 </Text>
                 <Text style={styles.baseFareHint}>Provider fares are this amount or higher.</Text>
@@ -992,6 +1060,7 @@ const HomeScreen = ({ navigation, route }) => {
                   </Text>
                 ) : null}
               </View>
+              </>
             )}
             <TouchableOpacity style={styles.compareBtn} onPress={handleCompare} disabled={loading}>
               {loading ? <ActivityIndicator size="small" color={themeColors.onAccent} /> : <Text style={styles.compareBtnText}>Compare fares</Text>}

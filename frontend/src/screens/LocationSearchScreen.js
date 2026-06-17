@@ -247,6 +247,7 @@ const LocationSearchScreen = ({ navigation, route }) => {
       destinationCoords: toPlace.coords,
       baseFareEstimate: typeof minEstimate?.baseFare === 'number' ? minEstimate.baseFare : undefined,
       distanceKmEstimate: typeof minEstimate?.distanceKm === 'number' ? minEstimate.distanceKm : undefined,
+      minFareCalibrated: Boolean(minEstimate?.calibratedFromScrapes),
       ts: Date.now(),
     };
     // Merge params into the Rides tab; replace() often fails to apply nested tab params reliably.

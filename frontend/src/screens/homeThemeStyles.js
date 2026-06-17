@@ -231,6 +231,14 @@ export function createHomeStyles(c) {
       lineHeight: 14,
       paddingHorizontal: 4,
     },
+    trafficSurgeChip: {
+      marginBottom: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+    },
+    trafficSurgeChipText: { fontSize: 12, fontWeight: '800' },
     baseFareBanner: {
       marginTop: 0,
       marginBottom: 10,

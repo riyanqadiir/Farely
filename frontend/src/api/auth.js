@@ -11,7 +11,6 @@ export const authApi = {
   setPassword: (body) => farelyApi.post('/auth/set-password', body),
   login: (body) => farelyApi.post('/auth/login', body),
   getMe: () => farelyApi.get('/auth/me'),
-  google: (body) => farelyApi.post('/auth/google', body),
   forgotPassword: (body) => farelyApi.post('/auth/forgot-password', body),
   verifyForgotPasswordOtp: (body) => farelyApi.post('/auth/verify-forgot-password-otp', body),
   resetPassword: (body) => farelyApi.post('/auth/reset-password', body),

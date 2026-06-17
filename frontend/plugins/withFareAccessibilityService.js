@@ -186,7 +186,7 @@ public class MyAccessibilityService extends AccessibilityService {
         if ("Bykea".equals(provider)) {
             ArrayList<Double> bykeaFares = new ArrayList<>();
             ArrayList<String> bykeaRaws = new ArrayList<>();
-            harvestBykeaFares(rootNode, bykeaFares, bykeaRaws);
+            harvestBykeaFares(rootNode, bykeaFares, bykeaRaws, "");
             Log.d("BykeaFare", "handoff rt=" + rideTypeHandoff + " ac=" + carAcHandoff + " candidates=" + bykeaFares.size());
             FareAccessibilityEmitter.emitDebug(this, "BykeaFare: handoff rt=" + rideTypeHandoff + " ac=" + carAcHandoff + " candidates=" + bykeaFares.size());
             if (bykeaFares.isEmpty()) {
@@ -270,6 +270,54 @@ public class MyAccessibilityService extends AccessibilityService {
             if (best < 0 || f > best) best = f;
         }
         return best;
+    }
+
+    /**
+     * Bykea highlights the user-selected tier with a "Rs. XXX" pill (currency prefix); other
+     * tier stripe numbers in the bottom row are bare. Picks the smallest such currency-tagged
+     * fare in a sane range (avoids "Rs. 0.00" placeholders or surge multipliers).
+     */
+    private double bykeaPickFromCurrencyTagged(ArrayList<Double> wf, ArrayList<String> wr) {
+        if (wf == null || wr == null || wf.size() != wr.size() || wf.isEmpty()) return -1;
+        ArrayList<Double> cf = new ArrayList<>();
+        for (int i = 0; i < wf.size(); i++) {
+            String r = wr.get(i);
+            if (r != null && r.contains("[c:cur]")) {
+                cf.add(wf.get(i));
+            }
+        }
+        if (cf.isEmpty()) return -1;
+        double best = -1;
+        for (int i = 0; i < cf.size(); i++) {
+            double f = cf.get(i);
+            if (f < 60 || f > 8000) continue;
+            if (best < 0 || f < best) best = f;
+        }
+        return best;
+    }
+
+    /**
+     * Returns the third-smallest fare from a list that looks like the Bykea tier stripe
+     * (bike < rickshaw < car < car_ac < plus). Requires monotonically increasing prices and
+     * a sane spread so we don't pick an arbitrary middle value from a noisy list.
+     */
+    private double bykeaCarNoAcByStripePosition(ArrayList<Double> wf) {
+        if (wf == null || wf.size() < 3) return -1;
+        ArrayList<Double> sorted = new ArrayList<>(wf);
+        java.util.Collections.sort(sorted);
+        double bike = sorted.get(0);
+        double rick = sorted.get(1);
+        double car = sorted.get(2);
+        if (bike < 80 || bike > 480) return -1;
+        if (rick < 150 || rick > 900) return -1;
+        if (car < 250 || car > 1500) return -1;
+        if (rick <= bike * 1.15) return -1;
+        if (car <= rick * 1.15) return -1;
+        if (sorted.size() >= 4) {
+            double carAc = sorted.get(3);
+            if (carAc <= car * 1.05) return -1;
+        }
+        return car;
     }
 
     /** Largest fare in [lo, hi] (inclusive); -1 if none. */
@@ -363,17 +411,19 @@ public class MyAccessibilityService extends AccessibilityService {
             if (wf.size() != pf.size()) {
                 Log.d("BykeaFare", "stripPlusGap removed " + (pf.size() - wf.size()) + " outlier(s), remain=" + wf.size());
             }
-            double v = bykeaMaxInClosedBand(wf, 280, 560);
+            double curPick = bykeaPickFromCurrencyTagged(wf, wr);
+            if (curPick >= 50) return new BykeaPick(curPick, bykeaFirstRawForFare(wf, wr, curPick));
+            double posPick = bykeaCarNoAcByStripePosition(wf);
+            if (posPick >= 50) return new BykeaPick(posPick, bykeaFirstRawForFare(wf, wr, posPick));
+            double v = bykeaMinInBand(wf, 380, 720);
             if (v >= 50) return new BykeaPick(v, bykeaFirstRawForFare(wf, wr, v));
-            v = bykeaMaxInClosedBand(wf, 260, 620);
+            v = bykeaMaxInClosedBand(wf, 380, 760);
             if (v >= 50) return new BykeaPick(v, bykeaFirstRawForFare(wf, wr, v));
-            v = bykeaMaxInClosedBand(wf, 240, 680);
+            v = bykeaMaxInClosedBand(wf, 320, 700);
             if (v >= 50) return new BykeaPick(v, bykeaFirstRawForFare(wf, wr, v));
-            v = bykeaMinInBand(pf, 260, 520);
+            v = bykeaMinInBand(pf, 360, 700);
             if (v >= 50) return new BykeaPick(v, bykeaFirstRawForFare(pf, pr, v));
-            v = bykeaMaxAtMost(pf, 570);
-            if (v >= 50) return new BykeaPick(v, bykeaFirstRawForFare(pf, pr, v));
-            v = bykeaMaxAtMost(pf, 650);
+            v = bykeaMaxAtMost(pf, 720);
             if (v >= 50) return new BykeaPick(v, bykeaFirstRawForFare(pf, pr, v));
         } else if ("car".equals(rt) && carAcHandoff) {
             ArrayList<Double> wfAc = new ArrayList<>();
@@ -383,6 +433,8 @@ public class MyAccessibilityService extends AccessibilityService {
                 wrAc.add(pr.get(i));
             }
             bykeaStripLargestOutlierIfPlusGap(wfAc, wrAc);
+            double curPick = bykeaPickFromCurrencyTagged(wfAc, wrAc);
+            if (curPick >= 50) return new BykeaPick(curPick, bykeaFirstRawForFare(wfAc, wrAc, curPick));
             double v = bykeaMinInBand(wfAc, 560, 920);
             if (v >= 50) return new BykeaPick(v, bykeaFirstRawForFare(wfAc, wrAc, v));
             v = bykeaMaxInClosedBand(wfAc, 480, 820);
@@ -390,11 +442,15 @@ public class MyAccessibilityService extends AccessibilityService {
             v = bykeaMaxAtMost(wfAc, 780);
             if (v >= 50) return new BykeaPick(v, bykeaFirstRawForFare(wfAc, wrAc, v));
         } else if ("bike".equals(rt)) {
+            double curPick = bykeaPickFromCurrencyTagged(pf, pr);
+            if (curPick >= 50) return new BykeaPick(curPick, bykeaFirstRawForFare(pf, pr, curPick));
             double v = bykeaMinInBand(pf, 70, 220);
             if (v >= 50) return new BykeaPick(v, bykeaFirstRawForFare(pf, pr, v));
             v = bykeaMaxAtMost(pf, 240);
             if (v >= 50) return new BykeaPick(v, bykeaFirstRawForFare(pf, pr, v));
         } else if ("rickshaw".equals(rt)) {
+            double curPick = bykeaPickFromCurrencyTagged(pf, pr);
+            if (curPick >= 50) return new BykeaPick(curPick, bykeaFirstRawForFare(pf, pr, curPick));
             double v = bykeaMinInBand(pf, 200, 340);
             if (v >= 50) return new BykeaPick(v, bykeaFirstRawForFare(pf, pr, v));
             v = bykeaMaxAtMost(pf, 360);
@@ -454,6 +510,90 @@ public class MyAccessibilityService extends AccessibilityService {
         return !isPremiumCarTierLine(lower);
     }
 
+    /** Bykea tier markers; mapped to canonical tier names we tag fares with. */
+    private boolean lineHasRickshawMarker(String lower) {
+        return lower != null && (
+            lower.contains("rickshaw") || lower.contains("rikshaw") || lower.contains("tuktuk")
+            || lower.contains("tuk-tuk") || lower.contains("3 wheel") || lower.contains("auto rickshaw")
+        );
+    }
+
+    private boolean lineHasBikeMarker(String lower) {
+        return lower != null && (
+            lower.contains(" bike") || lower.startsWith("bike") || lower.contains("motorbike")
+            || lower.contains("scooter") || lower.contains("two wheel") || lower.contains("2 wheel")
+        );
+    }
+
+    private boolean lineHasCarAcMarker(String lower) {
+        return lower != null && (
+            lower.contains("car ac") || lower.contains("car (ac)") || lower.contains("with ac")
+            || lower.contains("ac car")
+        );
+    }
+
+    private boolean lineHasCarPlusMarker(String lower) {
+        return lower != null && (
+            lower.contains("car plus") || lower.contains("comfort+") || lower.contains("comfortplus")
+            || lower.contains("premier") || lower.contains("business") || lower.contains("luxury")
+        );
+    }
+
+    private boolean lineHasPlainCarMarker(String lower) {
+        return lower != null && (
+            lower.contains(" car") || lower.startsWith("car ") || lower.equals("car")
+            || lower.contains("mini car") || lower.contains("economy car")
+            || lower.contains("non-ac") || lower.contains("without ac") || lower.contains("no ac")
+        );
+    }
+
+    /**
+     * Returns a single tier marker only when the subtree text shows EXACTLY one tier — so the
+     * root window (which contains every tier label) doesn't mis-tag every fare. Per-row Bykea
+     * containers do show only one tier, which is what we want to propagate to the price node.
+     */
+    private String singleTierInSubtree(String subLower) {
+        if (subLower == null) return null;
+        boolean rick = lineHasRickshawMarker(subLower);
+        boolean bike = lineHasBikeMarker(subLower);
+        boolean carAc = lineHasCarAcMarker(subLower);
+        boolean carPlus = lineHasCarPlusMarker(subLower);
+        boolean plainCar = lineHasPlainCarMarker(subLower) && !carAc && !carPlus && !rick;
+
+        int distinct = 0;
+        if (rick) distinct++;
+        if (bike) distinct++;
+        if (carAc) distinct++;
+        if (carPlus) distinct++;
+        if (plainCar) distinct++;
+        if (distinct != 1) return null;
+        if (rick) return "rickshaw";
+        if (bike) return "bike";
+        if (carAc) return "car_ac";
+        if (carPlus) return "car_plus";
+        if (plainCar) return "car";
+        return null;
+    }
+
+    private void appendSubtreeText(AccessibilityNodeInfo node, StringBuilder out, int depthLeft, int budget) {
+        if (node == null || depthLeft < 0 || out.length() >= budget) return;
+        CharSequence t = node.getText();
+        if (t != null) out.append(t).append(' ');
+        CharSequence cd = node.getContentDescription();
+        if (cd != null) out.append(cd).append(' ');
+        if (out.length() >= budget) return;
+        for (int i = 0; i < node.getChildCount(); i++) {
+            appendSubtreeText(node.getChild(i), out, depthLeft - 1, budget);
+            if (out.length() >= budget) return;
+        }
+    }
+
+    private String subtreeTextLower(AccessibilityNodeInfo node, int depth) {
+        StringBuilder sb = new StringBuilder();
+        appendSubtreeText(node, sb, depth, 1024);
+        return sb.toString().toLowerCase();
+    }
+
     private boolean matchesBykeaRideHint(String raw, String rideType, boolean carAc) {
         if (raw == null) return true;
         String s = raw.toLowerCase();
@@ -465,10 +605,11 @@ public class MyAccessibilityService extends AccessibilityService {
             return s.contains("rick") || s.contains("rickshaw") || s.contains("tuk") || s.contains("tuktuk") || s.contains("auto") || s.contains("3 wheel");
         }
         if ("car".equals(rt)) {
-            boolean bike = s.contains("bike") || s.contains("motor") || s.contains("scooter");
-            boolean rick = s.contains("rick") || s.contains("rickshaw") || s.contains("tuk") || s.contains("tuktuk");
+            boolean bike = s.contains("[tier:bike]") || s.contains("bike") || s.contains("motor") || s.contains("scooter");
+            boolean rick = s.contains("[tier:rickshaw]") || s.contains("rick") || s.contains("rickshaw") || s.contains("tuk") || s.contains("tuktuk");
             if (bike || rick) return false;
-            if (!carAc && isPremiumCarTierLine(s)) return false;
+            if (!carAc && (s.contains("[tier:car_plus]") || s.contains("[tier:car_ac]") || isPremiumCarTierLine(s))) return false;
+            if (!carAc && (s.contains("car ac") || s.contains("with ac") || s.contains("ac car"))) return false;
             if (carAc && (s.contains("non-ac") || s.contains("without ac") || s.contains("no ac"))) return false;
             return true;
         }
@@ -506,31 +647,41 @@ public class MyAccessibilityService extends AccessibilityService {
         return false;
     }
 
-    private void harvestBykeaFares(AccessibilityNodeInfo node, ArrayList<Double> fares, ArrayList<String> raws) {
+    private void harvestBykeaFares(AccessibilityNodeInfo node, ArrayList<Double> fares, ArrayList<String> raws, String tierHint) {
         if (node == null) return;
-        addBykeaFareCandidate(node.getText(), fares, raws);
-        addBykeaFareCandidate(node.getContentDescription(), fares, raws);
+
+        // Look at this node's whole subtree (sibling text included). If it shows a single tier, that's
+        // this row's tier — Bykea renders icon/label/price as siblings inside one column container.
+        String subLower = subtreeTextLower(node, 4);
+        String detected = singleTierInSubtree(subLower);
+        String effectiveHint = detected != null ? detected : tierHint;
+
+        addBykeaFareCandidate(node.getText(), fares, raws, effectiveHint);
+        addBykeaFareCandidate(node.getContentDescription(), fares, raws, effectiveHint);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            addBykeaFareCandidate(node.getHintText(), fares, raws);
+            addBykeaFareCandidate(node.getHintText(), fares, raws, effectiveHint);
         }
         for (int i = 0; i < node.getChildCount(); i++) {
-            harvestBykeaFares(node.getChild(i), fares, raws);
+            harvestBykeaFares(node.getChild(i), fares, raws, effectiveHint);
         }
     }
 
-    private void addBykeaFareCandidate(CharSequence text, ArrayList<Double> fares, ArrayList<String> raws) {
+    private void addBykeaFareCandidate(CharSequence text, ArrayList<Double> fares, ArrayList<String> raws, String tierHint) {
         if (text == null) return;
         String value = text.toString().trim().replace('\u00a0', ' ').replace('\u202f', ' ');
         if (value.isEmpty() || value.length() > 360) return;
         String lower = value.toLowerCase();
         Matcher matcher = FARE_PATTERN.matcher(value);
         String candidate = null;
+        boolean currencyTagged = false;
         if (matcher.find()) {
             candidate = matcher.group(1);
+            currencyTagged = true;
         } else {
             Matcher amtFirst = FARE_PATTERN_AMOUNT_FIRST.matcher(value);
             if (amtFirst.find()) {
                 candidate = amtFirst.group(1);
+                currencyTagged = true;
             }
         }
         if (candidate == null && (
@@ -568,8 +719,10 @@ public class MyAccessibilityService extends AccessibilityService {
                 candidate = bestCand;
             }
         }
+        String tierPrefix = (tierHint != null && !tierHint.isEmpty()) ? "[tier:" + tierHint + "] " : "";
+        String confTag = currencyTagged ? "[c:cur] " : "[c:bare] ";
         if (candidate != null) {
-            addParsedFare(candidate, value, fares, raws);
+            addParsedFare(candidate, tierPrefix + confTag + value, fares, raws);
             return;
         }
         if (bykeaFareRowIsAddressOrPostcodeNoise(lower, 0) && !moneyCueLine(lower)) {
@@ -578,7 +731,7 @@ public class MyAccessibilityService extends AccessibilityService {
         if (value.length() <= 120 && value.replaceAll("[^0-9.,]", "").length() >= 3) {
             Matcher loose = BYKEA_STANDALONE_MONEY.matcher(value);
             while (loose.find()) {
-                addParsedFare(loose.group(1), value, fares, raws);
+                addParsedFare(loose.group(1), tierPrefix + "[c:bare] " + value, fares, raws);
             }
         }
     }
@@ -695,6 +848,7 @@ import androidx.annotation.NonNull;
 import com.facebook.react.bridge.Arguments;
 import android.content.Context;
 import android.content.SharedPreferences;
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
@@ -728,26 +882,41 @@ public class FareAccessibilityModule extends ReactContextBaseJavaModule {
         } catch (Exception ignored) {}
     }
 
-    public static void emitUiData(String provider, double fare, String rawText) {
-        if (reactContextRef == null || !reactContextRef.hasActiveReactInstance()) return;
-        if (fare <= 0) return;
-
-        String signature = provider + ":" + fare + ":" + rawText;
-        long now = System.currentTimeMillis();
-        if (signature.equals(lastSignature) && (now - lastEmitAtMs) < 1200) {
-            return;
+    @ReactMethod
+    public void consumeBufferedCapture(Promise promise) {
+        try {
+            WritableMap map = FareAccessibilityEmitter.consumeBufferedCapture(getReactApplicationContext());
+            if (map == null) {
+                promise.resolve(null);
+            } else {
+                promise.resolve(map);
+            }
+        } catch (Exception e) {
+            promise.reject("BUFFER_READ_FAILED", e);
         }
-        lastSignature = signature;
-        lastEmitAtMs = now;
+    }
 
-        WritableMap map = Arguments.createMap();
-        map.putString("provider", provider);
-        map.putDouble("fare", fare);
-        map.putString("rawText", rawText);
+    public static void emitUiData(String provider, double fare, String rawText) {
+        if (reactContextRef == null || fare <= 0) return;
 
-        reactContextRef
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                .emit("UI_DATA", map);
+        if (reactContextRef.hasActiveReactInstance()) {
+            String signature = provider + ":" + fare + ":" + rawText;
+            long now = System.currentTimeMillis();
+            if (signature.equals(lastSignature) && (now - lastEmitAtMs) < 1200) {
+                return;
+            }
+            lastSignature = signature;
+            lastEmitAtMs = now;
+
+            WritableMap map = Arguments.createMap();
+            map.putString("provider", provider);
+            map.putDouble("fare", fare);
+            map.putString("rawText", rawText);
+
+            reactContextRef
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                    .emit("UI_DATA", map);
+        }
     }
 }
 `;
@@ -780,6 +949,7 @@ public class FareAccessibilityPackage implements ReactPackage {
   const emitterSource = `package ${packageName};
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import com.facebook.react.ReactApplication;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReactContext;
@@ -787,23 +957,89 @@ import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
 public class FareAccessibilityEmitter {
+    private static final String PREFS = "farely_accessibility";
+    private static final String K_BUFFER_PROVIDER = "buffer_provider";
+    private static final String K_BUFFER_FARE = "buffer_fare";
+    private static final String K_BUFFER_RAW = "buffer_raw";
+    private static final String K_BUFFER_AT = "buffer_at_ms";
+
     private static long lastDebugEmitAtMs = 0;
+    private static long lastEmitAtMs = 0;
+    private static String lastSignature = "";
+
+    private static void persistBuffer(Context context, String provider, double fare, String rawText) {
+        try {
+            SharedPreferences sp = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            sp.edit()
+                    .putString(K_BUFFER_PROVIDER, provider)
+                    .putString(K_BUFFER_FARE, String.valueOf(fare))
+                    .putString(K_BUFFER_RAW, rawText == null ? "" : rawText)
+                    .putLong(K_BUFFER_AT, System.currentTimeMillis())
+                    .apply();
+        } catch (Exception ignored) {}
+    }
+
+    private static void emitToJs(ReactContext reactContext, String provider, double fare, String rawText) {
+        String signature = provider + ":" + fare + ":" + rawText;
+        long now = System.currentTimeMillis();
+        if (signature.equals(lastSignature) && (now - lastEmitAtMs) < 1200) {
+            return;
+        }
+        lastSignature = signature;
+        lastEmitAtMs = now;
+
+        WritableMap map = Arguments.createMap();
+        map.putString("provider", provider);
+        map.putDouble("fare", fare);
+        map.putString("rawText", rawText == null ? "" : rawText);
+        reactContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                .emit("UI_DATA", map);
+    }
 
     public static void emit(Context context, String provider, double fare, String rawText) {
-        if (context == null || fare <= 0) return;
+        if (context == null || fare <= 0 || provider == null || provider.trim().isEmpty()) return;
+        persistBuffer(context, provider, fare, rawText);
+
         if (!(context.getApplicationContext() instanceof ReactApplication)) return;
 
         ReactApplication app = (ReactApplication) context.getApplicationContext();
         ReactContext reactContext = app.getReactNativeHost().getReactInstanceManager().getCurrentReactContext();
         if (reactContext == null || !reactContext.hasActiveReactInstance()) return;
 
-        WritableMap map = Arguments.createMap();
-        map.putString("provider", provider);
-        map.putDouble("fare", fare);
-        map.putString("rawText", rawText);
-        reactContext
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                .emit("UI_DATA", map);
+        emitToJs(reactContext, provider, fare, rawText);
+    }
+
+    public static WritableMap consumeBufferedCapture(Context context) {
+        if (context == null) return null;
+        try {
+            SharedPreferences sp = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            String provider = sp.getString(K_BUFFER_PROVIDER, null);
+            String fareStr = sp.getString(K_BUFFER_FARE, null);
+            if (provider == null || fareStr == null) return null;
+
+            double fare = Double.parseDouble(fareStr);
+            if (fare <= 0) return null;
+
+            String rawText = sp.getString(K_BUFFER_RAW, "");
+            long at = sp.getLong(K_BUFFER_AT, 0L);
+
+            sp.edit()
+                    .remove(K_BUFFER_PROVIDER)
+                    .remove(K_BUFFER_FARE)
+                    .remove(K_BUFFER_RAW)
+                    .remove(K_BUFFER_AT)
+                    .apply();
+
+            WritableMap map = Arguments.createMap();
+            map.putString("provider", provider);
+            map.putDouble("fare", fare);
+            map.putString("rawText", rawText == null ? "" : rawText);
+            map.putDouble("bufferedAt", (double) at);
+            return map;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     public static void emitDebug(Context context, String message) {

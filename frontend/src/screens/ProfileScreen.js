@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,17 +9,30 @@ import {
   ScrollView,
   Image,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 let ImagePicker = null;
 try {
   ImagePicker = require('expo-image-picker');
 } catch (_) {}
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { AuthContext } from '../context/AuthContext';
 import { profileApi } from '../api/profile';
 import { colors, spacing } from '../constants/theme';
 import { pushAppNotification } from '../utils/notifications';
+import { useTheme } from '../theme/ThemeContext';
 
 const ProfileScreen = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const { colors: themeColors } = useTheme();
+  const horizontalMargin = useMemo(() => {
+    if (windowWidth >= 900) return Math.max(24, (windowWidth - 640) / 2);
+    if (windowWidth >= 600) return Math.max(20, (windowWidth - 560) / 2);
+    return 0;
+  }, [windowWidth]);
+
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [street, setStreet] = useState('');
@@ -123,9 +136,57 @@ const ProfileScreen = ({ navigation, route }) => {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={[styles.container, { backgroundColor: themeColors.bg }]}
+      contentContainerStyle={[
+        styles.scrollContent,
+        {
+          paddingHorizontal: spacing.xl + horizontalMargin,
+          paddingBottom: spacing.xxl + insets.bottom,
+        },
+      ]}
+      keyboardShouldPersistTaps="handled"
+    >
+      {!openedFromMenu && (
+        <View
+          style={[
+            styles.tabActionsBar,
+            {
+              marginHorizontal: -(spacing.xl + horizontalMargin),
+              paddingTop: insets.top + 8,
+              paddingHorizontal: 14 + horizontalMargin,
+              paddingBottom: 12,
+              backgroundColor: themeColors.surface,
+              borderBottomColor: themeColors.border,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Menu')}
+            style={[styles.tabActionBtnPrimary, { backgroundColor: themeColors.accent }]}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Menu"
+            accessibilityHint="Opens account menu and settings"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <FontAwesome6 name="bars" size={18} color={themeColors.onAccent} solid />
+          </TouchableOpacity>
+          <Text style={[styles.tabActionsTitle, { color: themeColors.text }]}>Profile</Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Notification')}
+            style={[styles.tabActionBtn, { backgroundColor: themeColors.surfaceElevated, borderColor: themeColors.border }]}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <FontAwesome6 name="bell" size={18} color={themeColors.textSecondary} regular />
+          </TouchableOpacity>
+        </View>
+      )}
       {openedFromMenu && (
-        <View style={styles.inlineHeader}>
+        <View style={[styles.inlineHeader, { paddingTop: insets.top + 10 }]}>
           <TouchableOpacity
             onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Menu'))}
             style={styles.inlineBackBtn}
@@ -136,7 +197,7 @@ const ProfileScreen = ({ navigation, route }) => {
           <View style={{ width: 64 }} />
         </View>
       )}
-      <Text style={styles.title}>Edit Profile</Text>
+      <Text style={[styles.title, { color: themeColors.text }]}>Edit Profile</Text>
 
       <TouchableOpacity
         style={styles.avatarContainer}
@@ -155,47 +216,52 @@ const ProfileScreen = ({ navigation, route }) => {
       </TouchableOpacity>
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.surfaceElevated }]}
         placeholder="Full Name"
+        placeholderTextColor={themeColors.textMuted}
         value={fullName}
         onChangeText={setFullName}
       />
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.surfaceElevated }]}
         placeholder="Email"
+        placeholderTextColor={themeColors.textMuted}
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
       />
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.surfaceElevated }]}
         placeholder="Street"
+        placeholderTextColor={themeColors.textMuted}
         value={street}
         onChangeText={setStreet}
       />
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.surfaceElevated }]}
         placeholder="City"
+        placeholderTextColor={themeColors.textMuted}
         value={city}
         onChangeText={setCity}
       />
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.surfaceElevated }]}
         placeholder="District"
+        placeholderTextColor={themeColors.textMuted}
         value={district}
         onChangeText={setDistrict}
       />
 
       <TouchableOpacity
-        style={styles.saveButton}
+        style={[styles.saveButton, { backgroundColor: themeColors.accent }]}
         onPress={handleSave}
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={themeColors.onAccent} />
         ) : (
-          <Text style={styles.saveButtonText}>Save</Text>
+          <Text style={[styles.saveButtonText, { color: themeColors.onAccent }]}>Save</Text>
         )}
       </TouchableOpacity>
     </ScrollView>
@@ -203,8 +269,40 @@ const ProfileScreen = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  scrollContent: { padding: spacing.xl },
+  container: { flex: 1 },
+  scrollContent: {
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
+  },
+  tabActionsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+    borderBottomWidth: 1,
+    gap: 8,
+  },
+  tabActionBtnPrimary: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabActionBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  tabActionsTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 17,
+    fontWeight: '900',
+  },
   inlineHeader: {
     marginTop: 10,
     marginBottom: spacing.lg,
@@ -250,13 +348,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   saveButton: {
-    backgroundColor: colors.primary,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: spacing.lg,
   },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  saveButtonText: { fontSize: 16, fontWeight: '600' },
 });
 
 export default ProfileScreen;

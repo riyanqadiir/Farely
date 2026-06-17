@@ -57,6 +57,7 @@ Events emitted by app backend:
 - `ride.search.created`
 - `ride.provider_selection.created`
 - `ride.handoff.created`
+- `ride.handoff.capture_updated` (live fare from provider app; PATCH `/rides/ride-handoff/:id/capture`)
 - `ride.handoff.confirmed`
 - `ride.handoff.rejected`
 - `support.thread.created` (from app feedback form)

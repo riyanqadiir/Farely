@@ -1,8 +1,8 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { authApi } from '../api/auth';
+import { setSessionInvalidationHandler } from '../api/farelyApi';
+import { recordAccountModerationEvent, maybeNotifyAccessRestored } from '../utils/notifications';
 
 export const AuthContext = createContext();
 
@@ -34,43 +34,92 @@ async function readProfileOnboardedFlag(user) {
   return false;
 }
 
+/**
+ * Normalize a backend block/delete response payload to the shape the
+ * AccountBlockedScreen consumes.
+ */
+function buildBlockState(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  if (payload.kind === 'deleted') return { kind: 'deleted' };
+  return {
+    kind: 'blocked',
+    reason: payload.reason ?? null,
+    blockedUntil: payload.blockedUntil ?? null,
+    blockedAt: payload.blockedAt ?? null,
+    message: payload.message ?? null,
+  };
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pendingProfileComplete, setPendingProfileCompleteState] = useState(false);
+  /**
+   * When non-null the UI swaps to the `AccountBlocked` screen instead of
+   * the normal auth stack. Set either by the axios interceptor (after an
+   * already-authenticated request gets blocked) or by `login` when the
+   * very first auth call comes back 403/401.
+   */
+  const [sessionInvalidation, setSessionInvalidation] = useState(null);
 
-  useEffect(() => {
-    const webClientId = Constants.expoConfig?.extra?.googleWebClientId;
-    const iosClientId = Constants.expoConfig?.extra?.googleIosClientId;
-    if (webClientId || iosClientId) {
-      GoogleSignin.configure({
-        webClientId: webClientId || undefined,
-        iosClientId: iosClientId || undefined,
-      });
-    }
-    loadUser();
+  const clearSessionState = useCallback(async () => {
+    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem('pendingProfileComplete');
+    setUser(null);
+    setPendingProfileCompleteState(false);
   }, []);
 
-  const loadUser = async () => {
+  /** Centralized: any blocked/deleted detection routes through this. */
+  const handleSessionInvalidation = useCallback(
+    async (payload) => {
+      await recordAccountModerationEvent(payload);
+      await clearSessionState();
+      const next = buildBlockState(payload);
+      if (next) setSessionInvalidation(next);
+    },
+    [clearSessionState]
+  );
+
+  const loadUser = useCallback(async () => {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      setUser(null);
+      setPendingProfileCompleteState(false);
+      setLoading(false);
+      return;
+    }
     try {
-      const token = await AsyncStorage.getItem('token');
-      if (token) {
-        const res = await authApi.getMe();
-        const u = res.data?.user ?? res.data;
-        setUser(u);
-        const onboarded = await readProfileOnboardedFlag(u);
-        setPendingProfileCompleteState(!onboarded);
-      } else {
+      const res = await authApi.getMe();
+      const u = res.data?.user ?? res.data;
+      setUser(u);
+      const onboarded = await readProfileOnboardedFlag(u);
+      setPendingProfileCompleteState(!onboarded);
+      await maybeNotifyAccessRestored(u);
+    } catch (err) {
+      const status = err.response?.status;
+      const data = err.response?.data || {};
+      const code = data.code || '';
+      const handledByInterceptor =
+        (status === 403 && code === 'ACCOUNT_BLOCKED') ||
+        (status === 401 && code === 'USER_NOT_FOUND');
+      if (!handledByInterceptor) {
         setUser(null);
         setPendingProfileCompleteState(false);
       }
-    } catch (err) {
-      setUser(null);
-      setPendingProfileCompleteState(false);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Register axios handler before paint so the first `getMe` always updates UI on block/delete.
+  useLayoutEffect(() => {
+    setSessionInvalidationHandler((payload) => handleSessionInvalidation(payload));
+    return () => setSessionInvalidationHandler(null);
+  }, [handleSessionInvalidation]);
+
+  useEffect(() => {
+    void loadUser();
+  }, [loadUser]);
 
   /**
    * Mark the one-time profile step complete for this account (device-local).
@@ -96,10 +145,39 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await authApi.login({ loginId, password });
       await AsyncStorage.setItem('token', res.data.token);
+      // Clear any prior block screen since a successful login means
+      // the account is healthy again (e.g., temporary block expired).
+      setSessionInvalidation(null);
       await loadUser();
       return { success: true };
     } catch (err) {
-      return { success: false, msg: err.response?.data?.message || 'Login failed' };
+      const status = err.response?.status;
+      const data = err.response?.data || {};
+      if (status === 403 && data.code === 'ACCOUNT_BLOCKED') {
+        return { success: false, blocked: true, msg: data.message || 'Account blocked.' };
+      }
+      if (status === 401 && data.code === 'USER_NOT_FOUND') {
+        return { success: false, deleted: true, msg: data.message || 'Account no longer exists.' };
+      }
+      if (status === 401 && data.code === 'PASSWORD_NOT_SET') {
+        return {
+          success: false,
+          passwordNotSet: true,
+          msg:
+            data.message ||
+            'No password set yet. Use Forgot password to verify your email or phone and create one.',
+        };
+      }
+      if (status === 400 && Array.isArray(data.errors) && data.errors.length > 0) {
+        const first = data.errors[0];
+        const vmsg = typeof first?.message === 'string' ? first.message : null;
+        return { success: false, msg: vmsg || data.message || 'Login failed' };
+      }
+      const serverMsg = typeof data.message === 'string' ? data.message : null;
+      return {
+        success: false,
+        msg: serverMsg || err.message || 'Login failed',
+      };
     }
   };
 
@@ -109,42 +187,15 @@ export const AuthProvider = ({ children }) => {
     return { success: false, msg: 'Use new signup flow (OTP → Set Password)' };
   };
 
-  const googleSignIn = async () => {
-    try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const signInResult = await GoogleSignin.signIn();
-      if (signInResult?.type !== 'success' || !signInResult.data?.idToken) {
-        return { success: false, msg: signInResult?.type === 'cancelled' ? 'Sign-in was cancelled.' : 'Could not get ID token.' };
-      }
-      const res = await authApi.google({ idToken: signInResult.data.idToken });
-      await AsyncStorage.setItem('token', res.data.token);
-      await loadUser();
-      return { success: true };
-    } catch (err) {
-      const raw = err.response?.data?.message || err.message || 'Google Sign-In failed.';
-      const combined = `${raw} ${err?.code ?? ''}`;
-      if (/DEVELOPER_ERROR|developer_error|code.*10/i.test(combined)) {
-        return {
-          success: false,
-          msg:
-            'Google Sign-In is not configured for this Android build. In Google Cloud Console, add an OAuth '
-            + '"Android" client with package com.farely.app and your debug keystore SHA-1, then rebuild the app. '
-            + 'See docs/GOOGLE_SSO_SETUP.md',
-        };
-      }
-      return { success: false, msg: raw };
-    }
-  };
+  const logout = useCallback(async () => {
+    await clearSessionState();
+    setSessionInvalidation(null);
+  }, [clearSessionState]);
 
-  const logout = async () => {
-    try {
-      await GoogleSignin.signOut();
-    } catch (_) {}
-    await AsyncStorage.removeItem('token');
-    await AsyncStorage.removeItem('pendingProfileComplete');
-    setUser(null);
-    setPendingProfileCompleteState(false);
-  };
+  /** Clears the block/deleted screen so the user lands on Welcome again. */
+  const dismissSessionInvalidation = useCallback(() => {
+    setSessionInvalidation(null);
+  }, []);
 
   return (
     <AuthContext.Provider
@@ -152,13 +203,14 @@ export const AuthProvider = ({ children }) => {
         user,
         loading,
         login,
-        googleSignIn,
         logout,
         loadUser,
         authApi,
         pendingProfileComplete,
         setPendingProfileComplete,
         markProfileOnboardingDone,
+        sessionInvalidation,
+        dismissSessionInvalidation,
       }}
     >
       {children}

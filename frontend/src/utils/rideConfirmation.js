@@ -44,5 +44,16 @@ export async function clearPendingRideConfirmation() {
   await AsyncStorage.removeItem(KEY).catch(() => {});
 }
 
+export async function patchPendingRideConfirmation(handoffId, patch) {
+  if (!handoffId || !patch || typeof patch !== 'object') return;
+  try {
+    const list = await getPendingRideConfirmations();
+    const next = list.map((item) =>
+      item?.handoffId === handoffId ? { ...item, ...patch } : item
+    );
+    await AsyncStorage.setItem(KEY, JSON.stringify(next));
+  } catch (_) {}
+}
+
 // Backward-compatible aliases
 export const setPendingRideConfirmation = addPendingRideConfirmation;

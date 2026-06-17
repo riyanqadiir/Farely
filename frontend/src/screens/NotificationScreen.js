@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { getAppNotifications } from '../utils/notifications';
 import { runAfterNavigationTransition } from '../utils/navigationTiming';
 import { useTheme } from '../theme/ThemeContext';
+import { AuthContext } from '../context/AuthContext';
 
 const FALLBACK_ITEMS = [
   {
@@ -35,7 +36,9 @@ function relativeTime(iso) {
   return 'Yesterday';
 }
 
-const Section = ({ title, items, colors, styles }) => (
+const Section = ({ title, items, colors, styles }) => {
+  if (!items.length) return null;
+  return (
   <View style={styles.section}>
     <Text style={[styles.sectionTitle, { color: colors.accentSecondary }]}>{title}</Text>
     {items.map((n) => (
@@ -51,23 +54,29 @@ const Section = ({ title, items, colors, styles }) => (
       </View>
     ))}
   </View>
-);
+  );
+};
 
 const NotificationScreen = ({ navigation }) => {
   const { colors } = useTheme();
+  const { user } = useContext(AuthContext);
+  const viewerId = user && (user.id != null || user._id != null) ? String(user.id ?? user._id) : null;
   const styles = useMemo(() => createStyles(), []);
   const [items, setItems] = useState(FALLBACK_ITEMS);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (fromPull = false) => {
-    if (fromPull) setRefreshing(true);
-    try {
-      const data = await getAppNotifications();
-      setItems(data.length ? data : FALLBACK_ITEMS);
-    } finally {
-      if (fromPull) setRefreshing(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (fromPull = false) => {
+      if (fromPull) setRefreshing(true);
+      try {
+        const data = await getAppNotifications(viewerId);
+        setItems(data.length ? data : FALLBACK_ITEMS);
+      } finally {
+        if (fromPull) setRefreshing(false);
+      }
+    },
+    [viewerId]
+  );
 
   useFocusEffect(
     useCallback(() => {

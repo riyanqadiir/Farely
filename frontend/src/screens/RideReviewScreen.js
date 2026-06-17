@@ -6,6 +6,7 @@ import farelyApi from '../api/farelyApi';
 import { useTheme } from '../theme/ThemeContext';
 import { showAppToast } from '../utils/appToast';
 import { removePendingRideConfirmation } from '../utils/rideConfirmation';
+import { syncCaptureForPendingHandoff } from '../utils/handoffCaptureSync';
 
 const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -60,9 +61,32 @@ const RideReviewScreen = ({ navigation }) => {
     load();
   }, [load]);
 
-  const decide = async (id, taken) => {
+  const decide = async (item, taken) => {
+    const id = item?._id;
+    if (!id) return;
+    let capturedFare = item.capturedFare;
+    let capturedProvider = item.capturedProvider || item.provider;
+    if (!(typeof capturedFare === 'number' && capturedFare > 0)) {
+      const synced = await syncCaptureForPendingHandoff({
+        handoffId: id,
+        provider: item.provider,
+        pickupCoords: item.pickupCoords,
+        destinationCoords: item.destinationCoords,
+        rideType: item.rideType,
+        carAc: item.carAc,
+      });
+      if (synced?.capturedFare) {
+        capturedFare = synced.capturedFare;
+        capturedProvider = synced.capturedProvider || capturedProvider;
+      }
+    }
     try {
-      await farelyApi.post('/rides/ride-handoff/confirm', { handoffId: id, taken });
+      const body = { handoffId: id, taken };
+      if (typeof capturedFare === 'number' && capturedFare > 0) {
+        body.capturedFare = Math.round(capturedFare);
+        body.capturedProvider = capturedProvider;
+      }
+      await farelyApi.post('/rides/ride-handoff/confirm', body);
       await removePendingRideConfirmation(id);
       setRides((prev) => prev.filter((item) => item._id !== id));
       showAppToast({
@@ -120,13 +144,13 @@ const RideReviewScreen = ({ navigation }) => {
               <View style={styles.actions}>
                 <TouchableOpacity
                   style={[styles.noBtn, { borderColor: colors.borderStrong, backgroundColor: colors.chipInactive }]}
-                  onPress={() => decide(item._id, false)}
+                  onPress={() => decide(item, false)}
                 >
                   <Text style={[styles.noText, { color: colors.textSecondary }]}>No</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.yesBtn, { backgroundColor: colors.accent }]}
-                  onPress={() => decide(item._id, true)}
+                  onPress={() => decide(item, true)}
                 >
                   <Text style={[styles.yesText, { color: colors.onAccent }]}>Yes, took ride</Text>
                 </TouchableOpacity>

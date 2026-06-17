@@ -38,9 +38,8 @@ const SignupScreen = ({ navigation }) => {
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState({ name: '', email: '', phone: '' });
-  const { authApi, googleSignIn } = useContext(AuthContext);
+  const { authApi } = useContext(AuthContext);
 
   const filteredCountries = useMemo(() => {
     const q = (countrySearch || '').trim().toLowerCase();
@@ -99,13 +98,6 @@ const SignupScreen = ({ navigation }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleGoogleSignUp = async () => {
-    setGoogleLoading(true);
-    const res = await googleSignIn();
-    setGoogleLoading(false);
-    if (!res.success) alert(res.msg);
   };
 
   return (
@@ -203,23 +195,7 @@ const SignupScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        <AuthDivider label="Or sign up with" />
-
-        <TouchableOpacity
-          style={[styles.socialRow, styles.googleRow]}
-          onPress={handleGoogleSignUp}
-          disabled={googleLoading}
-          activeOpacity={0.85}
-        >
-          {googleLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <FontAwesome6 name="google" size={20} color="#fff" brand />
-              <Text style={styles.socialRowTextLight}>Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        <AuthDivider label="More sign-up options coming soon" />
 
         <TouchableOpacity style={[styles.socialRow, styles.facebookRow]} disabled activeOpacity={0.7}>
           <FontAwesome6 name="facebook" size={20} color="#fff" brand />
@@ -395,7 +371,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginBottom: 10,
   },
-  googleRow: { backgroundColor: '#4285f4' },
   facebookRow: { backgroundColor: '#1877f2' },
   phoneSocialRow: {
     backgroundColor: '#fff',

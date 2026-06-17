@@ -1,6 +1,6 @@
 import React, { useContext, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, useWindowDimensions } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { AuthContext } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -8,7 +8,15 @@ import { useTheme } from '../theme/ThemeContext';
 const MenuScreen = ({ navigation }) => {
   const { logout } = useContext(AuthContext);
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const styles = useMemo(() => createStyles(), []);
+
+  const horizontalPad = useMemo(() => {
+    if (windowWidth >= 900) return Math.max(24, (windowWidth - 640) / 2);
+    if (windowWidth >= 600) return Math.max(20, (windowWidth - 560) / 2);
+    return 16;
+  }, [windowWidth]);
 
   const handleLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to log out of Farely?', [
@@ -25,7 +33,13 @@ const MenuScreen = ({ navigation }) => {
   );
 
   const MenuRow = ({ icon, label, subtitle, onPress }) => (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity
+      style={styles.row}
+      onPress={onPress}
+      activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={subtitle ? `${label}. ${subtitle}` : label}
+    >
       <View style={styles.rowIconWrap}>
         <FontAwesome6 name={icon} size={16} color={colors.textSecondary} solid />
       </View>
@@ -38,8 +52,18 @@ const MenuScreen = ({ navigation }) => {
   );
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top', 'bottom']}>
-      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['bottom']}>
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: colors.surface,
+            borderBottomColor: colors.border,
+            paddingTop: Math.max(insets.top, 12),
+            paddingHorizontal: horizontalPad,
+          },
+        ]}
+      >
         <TouchableOpacity
           onPress={() =>
             navigation.canGoBack()
@@ -47,15 +71,27 @@ const MenuScreen = ({ navigation }) => {
               : navigation.navigate('Main', { screen: 'Rides' })
           }
           style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <FontAwesome6 name="chevron-left" size={14} color={colors.accent} solid />
           <Text style={[styles.backText, { color: colors.accent }]}>Back</Text>
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>Menu</Text>
-        <View style={{ width: 64 }} />
+        <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            paddingHorizontal: horizontalPad,
+            paddingBottom: Math.max(insets.bottom, 16) + 24,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={[styles.intro, { color: colors.textSecondary }]}>
           Farely compares Yango and Bykea side by side. Book and pay only inside the provider you choose.
         </Text>
@@ -146,7 +182,13 @@ const MenuScreen = ({ navigation }) => {
               onPress={() => navigation.push('PrivacyPolicy')}
             />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
-            <TouchableOpacity style={styles.logoutRow} onPress={handleLogout} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.logoutRow}
+              onPress={handleLogout}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Log out. Sign out on this device"
+            >
               <View style={styles.rowIconWrap}>
                 <FontAwesome6 name="right-from-bracket" size={16} color={colors.danger} solid />
               </View>
@@ -170,18 +212,25 @@ function createStyles() {
   return StyleSheet.create({
     safe: { flex: 1 },
     header: {
-      paddingHorizontal: 16,
-      paddingTop: 10,
       paddingBottom: 14,
       borderBottomWidth: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
     },
-    backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 88 },
+    backBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      minWidth: 48,
+      minHeight: 48,
+      justifyContent: 'flex-start',
+      paddingRight: 8,
+    },
+    headerSpacer: { width: 48 },
     backText: { fontWeight: '800', fontSize: 12 },
-    title: { fontSize: 18, fontWeight: '900' },
-    scroll: { padding: 16, paddingBottom: 32 },
+    title: { fontSize: 18, fontWeight: '900', flex: 1, textAlign: 'center' },
+    scroll: { paddingTop: 16 },
     intro: {
       fontSize: 13,
       lineHeight: 19,
@@ -204,6 +253,7 @@ function createStyles() {
     row: {
       flexDirection: 'row',
       alignItems: 'center',
+      minHeight: 52,
       paddingVertical: 14,
       paddingHorizontal: 12,
       gap: 10,
@@ -216,6 +266,7 @@ function createStyles() {
     logoutRow: {
       flexDirection: 'row',
       alignItems: 'center',
+      minHeight: 52,
       paddingVertical: 14,
       paddingHorizontal: 12,
       gap: 10,

@@ -18,22 +18,22 @@ const LoginScreen = ({ navigation }) => {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const { login, googleSignIn } = useContext(AuthContext);
+  const [passwordNotSetHint, setPasswordNotSetHint] = useState(false);
+  const { login } = useContext(AuthContext);
 
   const handleLogin = async () => {
     if (!loginId || !password) return alert('Please fill all fields');
+    setPasswordNotSetHint(false);
     setLoading(true);
     const res = await login(loginId, password);
     setLoading(false);
-    if (!res.success) alert(res.msg);
-  };
-
-  const handleGoogleLogin = async () => {
-    setGoogleLoading(true);
-    const res = await googleSignIn();
-    setGoogleLoading(false);
-    if (!res.success) alert(res.msg);
+    if (!res.success && !res.blocked && !res.deleted) {
+      if (res.passwordNotSet) {
+        setPasswordNotSetHint(true);
+      } else {
+        alert(res.msg);
+      }
+    }
   };
 
   return (
@@ -61,7 +61,10 @@ const LoginScreen = ({ navigation }) => {
             placeholder="you@email.com or +92…"
             placeholderTextColor="#9ca3af"
             value={loginId}
-            onChangeText={setLoginId}
+            onChangeText={(t) => {
+              setLoginId(t);
+              setPasswordNotSetHint(false);
+            }}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
@@ -73,9 +76,19 @@ const LoginScreen = ({ navigation }) => {
             placeholder="••••••••"
             placeholderTextColor="#9ca3af"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(t) => {
+              setPassword(t);
+              setPasswordNotSetHint(false);
+            }}
             secureTextEntry
           />
+
+          {passwordNotSetHint ? (
+            <Text style={styles.passwordHint}>
+              No password on this account yet. Tap Forgot password below to verify your email or phone and create
+              one.
+            </Text>
+          ) : null}
 
           <TouchableOpacity
             style={styles.forgotWrap}
@@ -93,23 +106,7 @@ const LoginScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        <AuthDivider label="Or continue with" />
-
-        <TouchableOpacity
-          style={[styles.socialRow, styles.googleRow]}
-          onPress={handleGoogleLogin}
-          disabled={googleLoading}
-          activeOpacity={0.85}
-        >
-          {googleLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <FontAwesome6 name="google" size={20} color="#fff" brand />
-              <Text style={styles.socialRowTextLight}>Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        <AuthDivider label="More sign-in options coming soon" />
 
         <TouchableOpacity style={[styles.socialRow, styles.facebookRow]} disabled activeOpacity={0.7}>
           <FontAwesome6 name="facebook" size={20} color="#fff" brand />
@@ -195,6 +192,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.gray900,
   },
+  passwordHint: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#b45309',
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: spacing.md,
+    marginTop: -4,
+  },
   forgotWrap: { alignSelf: 'flex-end', marginBottom: spacing.lg, marginTop: -4 },
   forgotText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
   primaryBtn: {
@@ -219,7 +229,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginBottom: 10,
   },
-  googleRow: { backgroundColor: '#4285f4' },
   facebookRow: { backgroundColor: '#1877f2' },
   phoneRow: {
     backgroundColor: '#fff',
