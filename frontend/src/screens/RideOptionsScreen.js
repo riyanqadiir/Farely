@@ -18,7 +18,7 @@ import { pushAppNotification } from '../utils/notifications';
 import { redirectToProvider } from '../utils/providerRedirect';
 import { useTheme } from '../theme/ThemeContext';
 import { setPendingRideConfirmation } from '../utils/rideConfirmation';
-import { buildRouteHandoffBody, hasValidRouteEndpoints } from '../utils/rideRoute';
+import { buildRouteHandoffBody, coerceCoords, hasValidRouteEndpoints } from '../utils/rideRoute';
 import { buildLiveCalibrationFromCaptures } from '../utils/liveCalibration';
 import { getCapturedFaresForContext } from '../utils/liveFareStore';
 import { showAppToast } from '../utils/appToast';
@@ -160,8 +160,20 @@ const RideOptionsScreen = ({ navigation, route }) => {
   const routeBaseFare = route?.params?.baseFare;
   const routeDistanceKm = route?.params?.distanceKm;
   const searchLogId = route?.params?.searchLogId;
-  const pickupCoords = route?.params?.pickupCoords;
-  const destinationCoords = route?.params?.destinationCoords;
+  const pickupCoords = useMemo(
+    () => coerceCoords(route?.params?.pickupCoords),
+    [
+      route?.params?.pickupCoords?.latitude,
+      route?.params?.pickupCoords?.longitude,
+    ]
+  );
+  const destinationCoords = useMemo(
+    () => coerceCoords(route?.params?.destinationCoords),
+    [
+      route?.params?.destinationCoords?.latitude,
+      route?.params?.destinationCoords?.longitude,
+    ]
+  );
   const initialCarAc = Boolean(route?.params?.carAc);
   const compareCalibrated = Boolean(route?.params?.compareCalibrated);
 
@@ -178,6 +190,7 @@ const RideOptionsScreen = ({ navigation, route }) => {
   const [bookingStatus, setBookingStatus] = useState('');
   const [capturedFareText, setCapturedFareText] = useState('');
   const [capturedProvider, setCapturedProvider] = useState('');
+  const capturedProviderRef = useRef('');
   const [capturedFare, setCapturedFare] = useState(null);
   const [bykeaConfirmOption, setBykeaConfirmOption] = useState(null);
   const [surge, setSurge] = useState(NEUTRAL_SURGE);
@@ -193,6 +206,7 @@ const RideOptionsScreen = ({ navigation, route }) => {
   const activeHandoffIdRef = useRef(null);
   const plannedHandoffIdRef = useRef(null);
   const planRouteKeyRef = useRef('');
+  const openingProviderRef = useRef(false);
   const captureDebouncerRef = useRef(null);
   if (!captureDebouncerRef.current) {
     captureDebouncerRef.current = createLiveCaptureDebouncer(450);
@@ -278,6 +292,7 @@ const RideOptionsScreen = ({ navigation, route }) => {
 
   const applyCaptureToCardState = useCallback((capture) => {
     if (!capture?.provider || !Number.isFinite(capture.fare)) return;
+    capturedProviderRef.current = capture.provider;
     setCapturedProvider(capture.provider);
     setCapturedFare(capture.fare);
     setCapturedFareText(
@@ -308,11 +323,15 @@ const RideOptionsScreen = ({ navigation, route }) => {
         return applyYangoBykeaMinSpread(mergeCapturesIntoFares(base, captured));
       });
 
-      const latest = pickLatestCapture(captured, preferredProvider || capturedProvider);
+      const latest = pickLatestCapture(
+        captured,
+        preferredProvider || capturedProviderRef.current
+      );
       if (latest) {
         const provider = normalizeProvider(latest.provider);
         const fare = typeof latest.fare === 'number' ? latest.fare : Number(latest.fare);
         if (provider && Number.isFinite(fare) && fare > 0) {
+          capturedProviderRef.current = provider;
           setCapturedProvider(provider);
           setCapturedFare(fare);
           setCapturedFareText(
@@ -321,7 +340,7 @@ const RideOptionsScreen = ({ navigation, route }) => {
         }
       }
     },
-    [pickupCoords, destinationCoords, rideType, carAc, baseFareList, capturedProvider]
+    [pickupCoords, destinationCoords, rideType, carAc, baseFareList]
   );
 
   const flushPendingCapture = async (handoffId, preferredProvider) => {
@@ -370,6 +389,11 @@ const RideOptionsScreen = ({ navigation, route }) => {
         activeHandoffIdRef.current = null;
       }
 
+      if (planRouteKeyRef.current === routeKey && plannedHandoffIdRef.current) {
+        if (mountedRef.current) setRouteReady('ready');
+        return true;
+      }
+
       if (mountedRef.current) setRouteReady('loading');
 
       const body = buildRouteHandoffBody({
@@ -381,6 +405,10 @@ const RideOptionsScreen = ({ navigation, route }) => {
         rideType,
         carAc,
       });
+      if (!body) {
+        if (mountedRef.current) setRouteReady('skipped');
+        return false;
+      }
 
       try {
         const res = await farelyApi.post('/rides/ride-handoff/plan-route', body);
@@ -424,21 +452,44 @@ const RideOptionsScreen = ({ navigation, route }) => {
   );
 
   useEffect(() => {
-    void registerPlannedRoute({ silent: true });
+    let cancelled = false;
+    (async () => {
+      const ok = await registerPlannedRoute({ silent: true });
+      if (!ok && !cancelled) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        if (!cancelled) await registerPlannedRoute({ silent: true });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [registerPlannedRoute]);
+
+  const clearOpenProviderUi = useCallback(() => {
+    openingProviderRef.current = false;
+    if (!mountedRef.current) return;
+    setBookingLoadingId(null);
+    setBookingStatus('');
+  }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'background' || next === 'inactive') {
+        clearOpenProviderUi();
+        return;
+      }
       if (next !== 'active') return;
+      clearOpenProviderUi();
       const handoffId = activeHandoffIdRef.current;
+      const preferred = capturedProviderRef.current;
       if (handoffId) {
-        void flushPendingCapture(handoffId, capturedProvider);
+        void flushPendingCapture(handoffId, preferred);
       } else {
-        void refreshCardsFromStoredCaptures(capturedProvider);
+        void refreshCardsFromStoredCaptures(preferred);
       }
     });
     return () => sub.remove();
-  }, [pickupCoords, destinationCoords, rideType, carAc, capturedProvider]);
+  }, [refreshCardsFromStoredCaptures, clearOpenProviderUi]);
 
   useFocusEffect(
     useCallback(() => {
@@ -476,6 +527,7 @@ const RideOptionsScreen = ({ navigation, route }) => {
         const provider = normalizeProvider(latest.provider);
         const fare = typeof latest.fare === 'number' ? latest.fare : Number(latest.fare);
         if (provider && Number.isFinite(fare) && fare > 0) {
+          capturedProviderRef.current = provider;
           setCapturedProvider(provider);
           setCapturedFare(fare);
           setCapturedFareText(latest.rawText || `${provider} PKR ${Math.round(fare)}`);
@@ -619,57 +671,14 @@ const RideOptionsScreen = ({ navigation, route }) => {
     }
   };
 
-  const runOpenProvider = async (rideOption) => {
-    const id = rideOption?.id;
-    if (!id) return;
+  const completeProviderOpenFollowUp = useCallback(
+    async (rideOption, redirect, loggedEstimateFare) => {
+      if (!redirect?.success) return;
 
-    if (routeReady === 'loading') {
-      showAppToast({
-        title: 'Preparing trip',
-        body: 'Saving your route — try again in a moment.',
-        tone: 'info',
-      });
-      return;
-    }
-    if (routeReady === 'failed') {
-      const recovered = await registerPlannedRoute({ silent: true });
-      if (!recovered) {
-        showAppToast({
-          title: 'Route not saved',
-          body: 'Could not reach the Farely server. Check login and internet, then try again.',
-          tone: 'error',
-        });
-        return;
+      if (!plannedHandoffIdRef.current) {
+        void registerPlannedRoute({ silent: true });
       }
-    }
-
-    setBookingLoadingId(id);
-    setBookingStatus('Opening provider app...');
-    try {
-      syncCaptureHandoffToNative(rideType, rideType === 'car' ? carAc : false);
-
-      const loggedEstimateFare = fareForRideLog(rideOption);
       const plannedId = plannedHandoffIdRef.current;
-      if (plannedId) {
-        activeHandoffIdRef.current = plannedId;
-        if (pickupCoords && destinationCoords) {
-          await setActiveCaptureHandoff({
-            handoffId: plannedId,
-            provider: rideOption.provider,
-            pickupCoords,
-            destinationCoords,
-            rideType,
-            carAc: rideType === 'car' ? carAc : false,
-          });
-        }
-      }
-
-      const redirect = await redirectToProvider(
-        rideOption.provider,
-        pickupCoords,
-        destinationCoords,
-        rideHandoff
-      );
 
       const selectionLogId = await logSelection({
         searchLogId,
@@ -683,58 +692,54 @@ const RideOptionsScreen = ({ navigation, route }) => {
         failureReason: redirect.reason || '',
       });
 
-      const handoffId = await recordHandoff({
-        ...buildRouteHandoffBody({
-          searchLogId,
-          pickup,
-          destination,
-          pickupCoords,
-          destinationCoords,
-          rideType,
-          carAc,
-          extra: {
-            selectionLogId,
-            plannedHandoffId: plannedId || undefined,
-            provider: rideOption.provider,
-            providerRideName: rideOption.name || rideOption.rideType || '',
-            estimatedFare: loggedEstimateFare,
-            redirectSucceeded: redirect.success,
-            redirectMode: redirect.mode,
-            failureReason: redirect.reason || '',
-            openedUrl: redirect.openedUrl || '',
-          },
-        }),
+      const handoffPayload = buildRouteHandoffBody({
+        searchLogId,
+        pickup,
+        destination,
+        pickupCoords,
+        destinationCoords,
+        rideType,
+        carAc,
+        extra: {
+          selectionLogId,
+          plannedHandoffId: plannedId || undefined,
+          provider: rideOption.provider,
+          providerRideName: rideOption.name || rideOption.rideType || '',
+          estimatedFare: loggedEstimateFare,
+          redirectSucceeded: redirect.success,
+          redirectMode: redirect.mode,
+          failureReason: redirect.reason || '',
+          openedUrl: redirect.openedUrl || '',
+        },
       });
 
+      const handoffId = handoffPayload ? await recordHandoff(handoffPayload) : null;
       const resolvedHandoffId = handoffId || plannedId;
-      if (resolvedHandoffId) {
-        activeHandoffIdRef.current = resolvedHandoffId;
-        await flushPendingCapture(resolvedHandoffId, rideOption.provider);
-      }
+      if (!resolvedHandoffId) return;
 
+      activeHandoffIdRef.current = resolvedHandoffId;
       if (handoffId && handoffId === plannedId) {
         plannedHandoffIdRef.current = null;
       }
 
-      if (redirect.success && resolvedHandoffId) {
-        const captureCtx = {
-          handoffId: resolvedHandoffId,
-          provider: rideOption.provider,
-          pickupCoords,
-          destinationCoords,
-          rideType,
-          carAc: rideType === 'car' ? carAc : false,
-        };
-        await setActiveCaptureHandoff(captureCtx);
-        await setPendingRideConfirmation({
-          ...captureCtx,
-          providerRideName: rideOption.name || rideOption.rideType || '',
-          estimatedFare: loggedEstimateFare,
-          pickup,
-          destination,
-          createdAt: new Date().toISOString(),
-        });
-      }
+      const captureCtx = {
+        handoffId: resolvedHandoffId,
+        provider: rideOption.provider,
+        pickupCoords,
+        destinationCoords,
+        rideType,
+        carAc: rideType === 'car' ? carAc : false,
+      };
+      await setActiveCaptureHandoff(captureCtx);
+      await setPendingRideConfirmation({
+        ...captureCtx,
+        providerRideName: rideOption.name || rideOption.rideType || '',
+        estimatedFare: loggedEstimateFare,
+        pickup,
+        destination,
+        createdAt: new Date().toISOString(),
+      });
+      await flushPendingCapture(resolvedHandoffId, rideOption.provider);
 
       if (!mountedRef.current) return;
       pushAppNotification({
@@ -743,7 +748,54 @@ const RideOptionsScreen = ({ navigation, route }) => {
         body: `Continue your booking in ${rideOption?.provider || 'provider app'}.`,
         meta: { rideId: rideOption?.id || null, provider: rideOption?.provider || '' },
       });
-      setBookingStatus(redirect.success ? 'Opened provider app' : 'Could not open provider app');
+      clearOpenProviderUi();
+    },
+    [
+      searchLogId,
+      pickup,
+      destination,
+      pickupCoords,
+      destinationCoords,
+      rideType,
+      carAc,
+      registerPlannedRoute,
+      clearOpenProviderUi,
+    ]
+  );
+
+  const runOpenProvider = async (rideOption) => {
+    const id = rideOption?.id;
+    if (!id || openingProviderRef.current) return;
+
+    openingProviderRef.current = true;
+
+    try {
+      syncCaptureHandoffToNative(rideType, rideType === 'car' ? carAc : false);
+
+      const loggedEstimateFare = fareForRideLog(rideOption);
+      const captureCtx = {
+        handoffId: plannedHandoffIdRef.current || `local-${Date.now()}`,
+        provider: rideOption.provider,
+        pickupCoords,
+        destinationCoords,
+        rideType,
+        carAc: rideType === 'car' ? carAc : false,
+      };
+      activeHandoffIdRef.current = captureCtx.handoffId;
+      if (pickupCoords && destinationCoords) {
+        void setActiveCaptureHandoff(captureCtx);
+      }
+
+      // Server logging runs in parallel — never block the deep link on Railway.
+      void registerPlannedRoute({ silent: true });
+
+      const redirect = await redirectToProvider(
+        rideOption.provider,
+        pickupCoords,
+        destinationCoords,
+        rideHandoff
+      );
+
       if (redirect.success && pickupCoords && destinationCoords) {
         const manualTitle = MANUAL_COORDS_ALERT_TITLE_BY_PROVIDER[rideOption.provider];
         if (manualTitle) {
@@ -753,19 +805,21 @@ const RideOptionsScreen = ({ navigation, route }) => {
             tone: 'info',
           });
         }
-      }
-      if (!redirect.success) {
+        void completeProviderOpenFollowUp(rideOption, redirect, loggedEstimateFare);
+      } else if (!redirect.success) {
         showAppToast({
           title: 'Could not open app',
           body: 'Please install the provider app and try again.',
           tone: 'error',
         });
+        clearOpenProviderUi();
       }
     } catch (err) {
       const msg = err.response?.data?.msg || err.response?.data?.message || 'Redirect failed';
-      showAppToast({ title: 'Redirect failed', body: msg, tone: 'error' });
-    } finally {
-      if (mountedRef.current) setBookingLoadingId(null);
+      if (mountedRef.current) {
+        showAppToast({ title: 'Redirect failed', body: msg, tone: 'error' });
+      }
+      clearOpenProviderUi();
     }
   };
 
@@ -889,7 +943,7 @@ const RideOptionsScreen = ({ navigation, route }) => {
             <RideOptionCard
               item={item}
               bookingLoadingId={bookingLoadingId}
-              openDisabled={routeReady === 'loading'}
+              openDisabled={false}
               onOpenApp={handleBook}
               colors={colors}
               styles={styles}

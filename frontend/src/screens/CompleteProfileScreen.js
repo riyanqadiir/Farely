@@ -16,11 +16,11 @@ try {
 } catch (_) {}
 import { AuthContext } from '../context/AuthContext';
 import { profileApi } from '../api/profile';
+import ReadOnlyProfileField from '../components/ReadOnlyProfileField';
 import { colors, spacing } from '../constants/theme';
 
 const CompleteProfileScreen = ({ navigation }) => {
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
   const [street, setStreet] = useState('');
   const [city, setCity] = useState('');
   const [district, setDistrict] = useState('');
@@ -30,11 +30,12 @@ const CompleteProfileScreen = ({ navigation }) => {
   const { user, loadUser, markProfileOnboardingDone } = useContext(AuthContext);
 
   const profilePhotoUrl = user?.profilePhotoUrl || photoUri;
+  const accountEmail = user?.email || '';
+  const accountPhone = user?.phone || user?.loginId || '';
 
   useEffect(() => {
     if (user) {
       setFullName(user.fullName || '');
-      setEmail(user.email || '');
       setStreet(user.street || '');
       setCity(user.city || '');
       setDistrict(user.district || '');
@@ -102,7 +103,6 @@ const CompleteProfileScreen = ({ navigation }) => {
     try {
       await profileApi.updateProfile({
         fullName: fullName.trim(),
-        email: email.trim() || undefined,
         street: street.trim() || undefined,
         city: city.trim() || undefined,
         district: district.trim() || undefined,
@@ -153,14 +153,10 @@ const CompleteProfileScreen = ({ navigation }) => {
         value={fullName}
         onChangeText={setFullName}
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
+      <ReadOnlyProfileField label="Email" value={accountEmail} />
+      {!!accountPhone && (
+        <ReadOnlyProfileField label="Phone" value={accountPhone} />
+      )}
       <TextInput
         style={styles.input}
         placeholder="Street"

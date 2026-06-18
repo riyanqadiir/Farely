@@ -21,6 +21,7 @@ import { AuthContext } from '../context/AuthContext';
 import { profileApi } from '../api/profile';
 import { colors, spacing } from '../constants/theme';
 import { pushAppNotification } from '../utils/notifications';
+import ReadOnlyProfileField from '../components/ReadOnlyProfileField';
 import { useTheme } from '../theme/ThemeContext';
 
 const ProfileScreen = ({ navigation, route }) => {
@@ -34,7 +35,6 @@ const ProfileScreen = ({ navigation, route }) => {
   }, [windowWidth]);
 
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
   const [street, setStreet] = useState('');
   const [city, setCity] = useState('');
   const [district, setDistrict] = useState('');
@@ -45,11 +45,12 @@ const ProfileScreen = ({ navigation, route }) => {
 
   const profilePhotoUrl = user?.profilePhotoUrl || photoUri;
   const openedFromMenu = !!route?.params?.fromMenu;
+  const accountEmail = user?.email || '';
+  const accountPhone = user?.phone || user?.loginId || '';
 
   useEffect(() => {
     if (user) {
       setFullName(user.fullName || '');
-      setEmail(user.email || '');
       setStreet(user.street || '');
       setCity(user.city || '');
       setDistrict(user.district || '');
@@ -115,7 +116,6 @@ const ProfileScreen = ({ navigation, route }) => {
     try {
       await profileApi.updateProfile({
         fullName: fullName.trim(),
-        email: email.trim() || undefined,
         street: street.trim() || undefined,
         city: city.trim() || undefined,
         district: district.trim() || undefined,
@@ -222,15 +222,18 @@ const ProfileScreen = ({ navigation, route }) => {
         value={fullName}
         onChangeText={setFullName}
       />
-      <TextInput
-        style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.surfaceElevated }]}
-        placeholder="Email"
-        placeholderTextColor={themeColors.textMuted}
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
+      <ReadOnlyProfileField
+        label="Email"
+        value={accountEmail}
+        themeColors={themeColors}
       />
+      {!!accountPhone && (
+        <ReadOnlyProfileField
+          label="Phone"
+          value={accountPhone}
+          themeColors={themeColors}
+        />
+      )}
       <TextInput
         style={[styles.input, { borderColor: themeColors.border, color: themeColors.text, backgroundColor: themeColors.surfaceElevated }]}
         placeholder="Street"

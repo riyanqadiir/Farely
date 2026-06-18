@@ -17,6 +17,7 @@
       ],
       "expo-maps",
       "./plugins/withGradleJvmArgs",
+      "./plugins/withAndroidProviderQueries",
       "./plugins/withFareAccessibilityService"
     ],
     "splash": {

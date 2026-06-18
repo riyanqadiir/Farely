@@ -12,7 +12,7 @@ import { consumeBufferedUiCapture } from '../native/accessibilityBridge';
  * @returns {Promise<boolean>} true when the server accepted the update
  */
 export async function patchHandoffCapture(handoffId, capturedFare, capturedProvider) {
-  if (!handoffId) return false;
+  if (!handoffId || String(handoffId).startsWith('local-')) return false;
   const fare = Math.round(Number(capturedFare));
   if (!Number.isFinite(fare) || fare <= 0) return false;
   const provider = String(capturedProvider || '').trim();

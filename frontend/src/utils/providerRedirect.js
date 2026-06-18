@@ -388,7 +388,8 @@ export async function redirectToProvider(providerName, pickupCoords, destination
     try {
       appInstalled = await Linking.canOpenURL(config.appPresenceScheme);
     } catch (_) {
-      appInstalled = false;
+      // Android 11+ requires <queries> in the manifest; treat as unknown and still try deep links.
+      appInstalled = true;
     }
   }
 

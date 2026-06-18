@@ -1,0 +1,14 @@
+# Old local APK outputs
+*.apk
+build-*.apk
+
+# Native build caches (EAS runs prebuild on the server)
+android/app/build/
+android/.gradle/
+android/build/
+ios/build/
+.expo/
+
+# Backend / admin — not needed for the mobile app archive
+../backend/
+../farely-admin/

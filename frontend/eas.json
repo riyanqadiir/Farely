@@ -18,7 +18,8 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8"
+        "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8",
+        "EXPO_PUBLIC_API_URL": "https://farely-production.up.railway.app"
       },
       "android": {
         "buildType": "apk"
